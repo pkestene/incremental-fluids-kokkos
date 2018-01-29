@@ -56,45 +56,6 @@ public:
     return _src;
   }
     
-  // /* Read-only and read-write access to grid cells */
-  // double at(int x, int y) const {
-  //   return _src[x + y*_w];
-  // }
-    
-  // double &at(int x, int y) {
-  //   return _src[x + y*_w];
-  // }
-    
-  // /* Linear intERPolate on grid at coordinates (x, y).
-  //  * Coordinates will be clamped to lie in simulation domain
-  //  */
-  // double lerp(double x, double y) const {
-  //   x = min(max(x - _ox, 0.0), _w - 1.001);
-  //   y = min(max(y - _oy, 0.0), _h - 1.001);
-  //   int ix = (int)x;
-  //   int iy = (int)y;
-  //   x -= ix;
-  //   y -= iy;
-        
-  //   double x00 = at(ix + 0, iy + 0), x10 = at(ix + 1, iy + 0);
-  //   double x01 = at(ix + 0, iy + 1), x11 = at(ix + 1, iy + 1);
-        
-  //   return lerp(lerp(x00, x10, x), lerp(x01, x11, x), y);
-  // }
-    
-    
-  // /* Sets fluid quantity inside the given rect to value `v' */
-  // void addInflow(double x0, double y0, double x1, double y1, double v) {
-  //   int ix0 = (int)(x0/_hx - _ox);
-  //   int iy0 = (int)(y0/_hx - _oy);
-  //   int ix1 = (int)(x1/_hx - _ox);
-  //   int iy1 = (int)(y1/_hx - _oy);
-        
-  //   for (int y = std::max(iy0, 0); y < std::min(iy1, _h); y++)
-  //     for (int x = std::max(ix0, 0); x < std::min(ix1, _h); x++)
-  // 	if (fabs(_src[x + y*_w]) < fabs(v))
-  // 	  _src[x + y*_w] = v;
-  // }
-};
+}; // class FluidQuantity
 
 #endif // FLUID_QUANTITY_H_

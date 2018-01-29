@@ -188,6 +188,115 @@ public:
   int ix0, ix1;
   int iy0, iy1;
   
-}; //
+}; // class InflowFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * BuidRHS functor.
+ *
+ * Builds the pressure right hand side as the negative divergence.
+ *
+ */
+class BuildRHSFunctor
+{
+
+public:
+
+  /**
+   * \param[in,out] data is a scalar quantity array to add inflow to
+   */
+  BuildRHSFunctor(FluidSolver fs) :
+    _r(fs._r),
+    _u(fs._u._src),
+    _v(fs._v._src),
+    scale(1.0/fs._hx),
+    _w(fs._w),
+    _h(fs._h)
+  {};
+
+  /* Sets fluid quantity inside the given rect to value `v' */
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    int ix, iy;
+    index2coord(index,x,y,_w,_h);
+
+    _r(x,y) = -scale * (_u(x + 1, y    ) - _u(x, y) +
+			_v(x    , y + 1) - _v(x, y) );
+    
+  } // operator()
+
+  Array2d _r;
+  Array2d _u, _v;
+  double scale;
+  int _w,_h;
+  
+} // class BuildRHSFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * Apply pressure functor.
+ *
+ * Applies the computed pressure to the velocity field.
+ *
+ */
+class ApplyPressureFunctor
+{
+
+public:
+
+  /**
+   * \param[in,out] data is a scalar quantity array to add inflow to
+   */
+  ApplyPressureFunctor(FluidSolver fs, double timestep) :
+    _p(fs._p),
+    _u(fs._u._src),
+    _v(fs._v._src),
+    scale(timestep/(fs._density*fs._hx),
+    _w(fs._w),
+    _h(fs._h)
+  {};
+
+  /* Sets fluid quantity inside the given rect to value `v' */
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    // this functor is supposed to be launched with _w*_h iterations
+    
+    int ix, iy;
+    index2coord(index,x,y,_w,_h);
+
+    _u(x,     y    ) -= scale * _p(x,y);
+    _u(x + 1, y    ) += scale * _p(x,y);
+    _v(x,     y    ) -= scale * _p(x,y);
+    _v(x,     y + 1) += scale * _p(x,y);
+
+    // deal with extra borders (left and right),
+    // !!! beware u is sized _w+1,_h
+    // !!! beware v is sized _w  ,_h+1
+    if (x==0) {
+      _u(0,y ) = 0.0;
+      _u(_w,y) = 0.0;
+    }
+
+    if (y==0) {
+      _v(x,0 ) = 0.0;
+      _v(x,_h) = 0.0;
+    }
+    
+  } // operator()
+
+  Array2d _p;
+  Array2d _u, _v;
+  double scale;
+  int _w,_h;
+  
+} // class ApplyPressureFunctor
 
 #endif // FLUID_FUNCTORS_H_
