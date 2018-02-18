@@ -34,7 +34,13 @@ public:
   double _oy;
   /* Grid cell size */
   double _hx;
-          
+
+  /* Linear intERPolate between a and b for x ranging from 0 to 1 */
+  KOKKOS_INLINE_FUNCTION
+  double lerp(double a, double b, double x) const {
+    return a*(1.0 - x) + b*x;
+  }
+  
 public:
   FluidQuantity(int w, int h, double ox, double oy, double hx)
     : _w(w), _h(h), _ox(ox), _oy(oy), _hx(hx) {
@@ -55,6 +61,28 @@ public:
   const Array2d& src() const {
     return _src;
   }
+
+    /* Linear intERPolate on grid at coordinates (x, y).
+   * Coordinates will be clamped to lie in simulation domain
+   */
+  KOKKOS_INLINE_FUNCTION
+  double lerp(double x, double y) const {
+    
+    x = fmin(fmax(x - _ox, 0.0), _w - 1.001);
+    y = fmin(fmax(y - _oy, 0.0), _h - 1.001);
+    int ix = (int)x;
+    int iy = (int)y;
+    x -= ix;
+    y -= iy;
+    
+    double x00 = _src(ix + 0, iy + 0);
+    double x10 = _src(ix + 1, iy + 0);
+    double x01 = _src(ix + 0, iy + 1);
+    double x11 = _src(ix + 1, iy + 1);
+    
+    return lerp(lerp(x00, x10, x), lerp(x01, x11, x), y);
+    
+  } // lerp
     
 }; // class FluidQuantity
 
