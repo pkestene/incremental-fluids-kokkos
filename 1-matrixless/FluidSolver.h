@@ -86,7 +86,7 @@ class FluidSolver {
     //   }
     // }
         
-    printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
+    // printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
   }
     
   void applyPressure(double timestep) {

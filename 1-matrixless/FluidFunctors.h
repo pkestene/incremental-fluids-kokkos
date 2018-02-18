@@ -9,7 +9,7 @@
 #endif // __CUDA_ARCH__
 
 #include "FluidQuantity.h"
-//#include "FluidSolver.h"
+#include "FluidSolver.h"
 
 // ==================================================================
 // ==================================================================
@@ -155,42 +155,42 @@ public:
  * Builds the pressure right hand side as the negative divergence.
  *
  */
-// class BuildRHSFunctor
-// {
+class BuildRHSFunctor
+{
 
-// public:
+public:
 
-//   /**
-//    * \param[in,out] data is a scalar quantity array to add inflow to
-//    */
-//   BuildRHSFunctor(FluidSolver fs) :
-//     _r(fs._r),
-//     _u(fs._u->_src),
-//     _v(fs._v->_src),
-//     scale(1.0/fs._hx),
-//     _w(fs._w),
-//     _h(fs._h)
-//   {};
+  /**
+   * \param[in,out] data is a scalar quantity array to add inflow to
+   */
+  BuildRHSFunctor(FluidSolver fs) :
+    _r(fs._r),
+    _u(fs._u->_src),
+    _v(fs._v->_src),
+    scale(1.0/fs._hx),
+    _w(fs._w),
+    _h(fs._h)
+  {};
 
-//   /* Sets fluid quantity inside the given rect to value `v' */
-//   KOKKOS_INLINE_FUNCTION
-//   void operator() (const int& index) const
-//   {
+  /* Sets fluid quantity inside the given rect to value `v' */
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
 
-//     int ix, iy;
-//     index2coord(index,x,y,_w,_h);
+    int ix, iy;
+    index2coord(index,x,y,_w,_h);
 
-//     _r(x,y) = -scale * (_u(x + 1, y    ) - _u(x, y) +
-// 			_v(x    , y + 1) - _v(x, y) );
+    _r(x,y) = -scale * (_u(x + 1, y    ) - _u(x, y) +
+			_v(x    , y + 1) - _v(x, y) );
     
-//   } // operator()
+  } // operator()
 
-//   Array2d _r;
-//   Array2d _u, _v;
-//   double scale;
-//   int _w,_h;
+  Array2d _r;
+  Array2d _u, _v;
+  double scale;
+  int _w,_h;
   
-// } // class BuildRHSFunctor
+} // class BuildRHSFunctor
 
 // ==================================================================
 // ==================================================================
