@@ -62,7 +62,14 @@ public:
     return _src;
   }
 
-    /* Linear intERPolate on grid at coordinates (x, y).
+
+  /* Read-only and read-write access to grid cells */
+  KOKKOS_INLINE_FUNCTION
+  double at(int x, int y) const {
+    return _src(x , y);
+  }
+  
+  /* Linear intERPolate on grid at coordinates (x, y).
    * Coordinates will be clamped to lie in simulation domain
    */
   KOKKOS_INLINE_FUNCTION

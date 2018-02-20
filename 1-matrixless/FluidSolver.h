@@ -3,6 +3,7 @@
 
 #include "kokkos_shared.h"
 #include "FluidQuantity.h"
+#include "FluidFunctors.h"
 
 // =========================================================================
 // =========================================================================
@@ -15,7 +16,9 @@ class FluidSolver {
   FluidQuantity *_d;
   FluidQuantity *_u;
   FluidQuantity *_v;
-    
+
+  Array2dHost _src_host;
+  
   /* Width and height */
   int _w;
   int _h;
@@ -31,7 +34,9 @@ class FluidSolver {
   /* Builds the pressure right hand side as the negative divergence */
   void buildRhs() {
 
-    // call functor
+    double scale = 1.0/_hx;
+
+    BuildRHSFunctor::apply(_r, _u->src(), _v->src(), scale, _w, _h);
     
   }
 
@@ -91,7 +96,9 @@ class FluidSolver {
     
   void applyPressure(double timestep) {
 
-    // call functor
+    double scale = timestep/(_density*_hx);
+
+    ApplyPressureFunctor::apply(_p, _u->src(), _v->src(), scale, _w, _h);
 
   }
     
@@ -106,6 +113,8 @@ public:
     _u = new FluidQuantity(_w + 1, _h,     0.0, 0.5, _hx);
     _v = new FluidQuantity(_w,     _h + 1, 0.5, 0.0, _hx);
 
+    _src_host = Array2dHost("data_on_host",_w,_h);
+    
     // Array2d are ref counted
     _r = Array2d("pressure_rhs",_w,_h);
     _p = Array2d("pressure",_w*_h);
@@ -122,10 +131,10 @@ public:
     buildRhs();
     project(600, timestep);
     applyPressure(timestep);
-        
-    // _d->advect(timestep, *_u, *_v);
-    // _u->advect(timestep, *_u, *_v);
-    // _v->advect(timestep, *_u, *_v);
+    
+    AdvectionFunctor::apply(*_d,*_u,*_v,timestep);
+    AdvectionFunctor::apply(*_u,*_u,*_v,timestep);
+    AdvectionFunctor::apply(*_u,*_u,*_v,timestep);
         
     /* Make effect of advection visible, since it's not an in-place operation */
     _d->flip();
@@ -135,9 +144,11 @@ public:
     
   /* Set density and x/y velocity in given rectangle to d/u/v, respectively */
   void addInflow(double x, double y, double w, double h, double d, double u, double v) {
-    _d->addInflow(x, y, x + w, y + h, d);
-    _u->addInflow(x, y, x + w, y + h, u);
-    _v->addInflow(x, y, x + w, y + h, v);
+
+    InflowFunctor::apply(*_d, d, x, y, x + w, y + h);
+    InflowFunctor::apply(*_u, u, x, y, x + w, y + h);
+    InflowFunctor::apply(*_v, v, x, y, x + w, y + h);
+    
   }
     
   /* Returns the maximum allowed timestep. Note that the actual timestep
@@ -145,29 +156,30 @@ public:
    * simulation - just never above.
    */
   double maxTimestep() {
+    
     double maxVelocity = 0.0;
-    for (int y = 0; y < _h; y++) {
-      for (int x = 0; x < _w; x++) {
-	/* Average velocity at grid cell center */
-	double u = _u->lerp(x + 0.5, y + 0.5);
-	double v = _v->lerp(x + 0.5, y + 0.5);
-                
-	double velocity = sqrt(u*u + v*v);
-	maxVelocity = max(maxVelocity, velocity);
-      }
-    }
-        
+
+    MaxVelocityFunctor::apply(*_u, *_v, maxVelocity, _w, _h);
+    
     /* Fluid should not flow more than two grid cells per iteration */
     double maxTimestep = 2.0*_hx/maxVelocity;
         
     /* Clamp to sensible maximum value in case of very small velocities */
     return std::min(maxTimestep, 1.0);
+    
   }
     
   /* Convert fluid density to RGBA image */
   void toImage(unsigned char *rgba) {
+
+    // copy current density array to a temporary destination on "host"
+    // which can then be used to save data to a file
+    Kokkos::deep_copy(_src_host, _d->src());
+
+    double *data = _src_host.ptr_on_device();
+    
     for (int i = 0; i < _w*_h; i++) {
-      int shade = (int)((1.0 - _d->src()[i])*255.0);
+      int shade = (int)((1.0 - data[i])*255.0);
       shade = std::max(std::min(shade, 255), 0);
             
       rgba[i*4 + 0] = shade;

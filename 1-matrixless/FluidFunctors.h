@@ -9,7 +9,6 @@
 #endif // __CUDA_ARCH__
 
 #include "FluidQuantity.h"
-#include "FluidSolver.h"
 
 // ==================================================================
 // ==================================================================
@@ -42,8 +41,17 @@ public:
     _hx(data._hx)
   {
   };
+
+  // static method which does it all: create and execute functor
+  static void apply(FluidQuantity data,
+		    FluidQuantity u,
+		    FluidQuantity v,
+		    double timestep) {
+    const int size = data._w*data._h;
+    AdvectionFunctor functor(data, u, v, timestep);
+    Kokkos::parallel_for(size, functor);
+  }
     
-  
   // Simple forward Euler method for velocity integration in time
   KOKKOS_INLINE_FUNCTION
   void euler(double &x,
@@ -105,9 +113,12 @@ public:
    * \param[in,out] data is a scalar quantity array to add inflow to
    */
   InflowFunctor(FluidQuantity fq, double v, double x0, double y0, double x1, double y1) :
-    _w(fq._w), _h(fq._h),
-    _ox(fq._ox), _oy(fq._oy), _hx(fq._hx),
-    data(fq.src() ),
+    _w(fq._w),
+    _h(fq._h),
+    _ox(fq._ox),
+    _oy(fq._oy),
+    _hx(fq._hx),
+    data( fq.src() ),
     v(v)
   {
     ix0 = (int)(x0/_hx - _ox); ix0 = ix0>0  ? ix0 : 0;
@@ -116,14 +127,23 @@ public:
     iy0 = (int)(y0/_hx - _oy); iy0 = iy0>0  ? iy0 : 0;
     iy1 = (int)(y1/_hx - _oy); iy1 = iy1<_h ? iy1 : _h;
   };
-  
-  /* Sets fluid quantity inside the given rect to value `v' */
+
+  // static method which does it all: create and execute functor
+  static void apply(FluidQuantity fq,
+		    double v,
+		    double x0, double y0, double x1, double y1)
+  {
+    const int size = fq._w*fq._h;
+    InflowFunctor functor(fq, v, x0, y0, x1, y1);
+    Kokkos::parallel_for(size, functor);
+  }
+    
   KOKKOS_INLINE_FUNCTION
   void operator() (const int& index) const
   {
 
-    // a modifier : faire un parallel dispatch 2d avec exactement le bon nombre
-    // d'itérations....
+    // TODO : modify in favour of a 2d dispatch with exactely the right number 
+    // of iterations.
     
     int ix, iy;
     index2coord(index,ix,iy,_w,_h);
@@ -161,23 +181,32 @@ class BuildRHSFunctor
 public:
 
   /**
-   * \param[in,out] data is a scalar quantity array to add inflow to
+   * \param[in]     r is the RHS   (_w  , _h  )
+   * \param[in,out] u is the x velocity (_w+1, _h  )
+   * \param[in,out] v is the y velocity (_w  , _h+1)
    */
-  BuildRHSFunctor(FluidSolver fs) :
-    _r(fs._r),
-    _u(fs._u->_src),
-    _v(fs._v->_src),
-    scale(1.0/fs._hx),
-    _w(fs._w),
-    _h(fs._h)
+  BuildRHSFunctor(Array2d r, Array2d u, Array2d v, double scale, int w, int h) :
+    _r(r),
+    _u(u),
+    _v(v),
+    scale(scale),
+    _w(w),
+    _h(h)
   {};
 
-  /* Sets fluid quantity inside the given rect to value `v' */
+  // static method which does it all: create and execute functor
+  static void apply(Array2d r, Array2d u, Array2d v, double scale, int w, int h)
+  {
+    const int size = w*h;
+    BuildRHSFunctor functor(r, u, v, scale, w, h);
+    Kokkos::parallel_for(size, functor);
+  }
+
   KOKKOS_INLINE_FUNCTION
   void operator() (const int& index) const
   {
 
-    int ix, iy;
+    int x, y;
     index2coord(index,x,y,_w,_h);
 
     _r(x,y) = -scale * (_u(x + 1, y    ) - _u(x, y) +
@@ -190,7 +219,7 @@ public:
   double scale;
   int _w,_h;
   
-} // class BuildRHSFunctor
+}; // class BuildRHSFunctor
 
 // ==================================================================
 // ==================================================================
@@ -201,58 +230,154 @@ public:
  * Applies the computed pressure to the velocity field.
  *
  */
-// class ApplyPressureFunctor
-// {
+class ApplyPressureFunctor
+{
 
-// public:
+public:
 
-//   /**
-//    * \param[in,out] data is a scalar quantity array to add inflow to
-//    */
-//   ApplyPressureFunctor(FluidSolver fs, double timestep) :
-//     _p(fs._p),
-//     _u(fs._u._src),
-//     _v(fs._v._src),
-//     scale(timestep/(fs._density*fs._hx),
-//     _w(fs._w),
-//     _h(fs._h)
-//   {};
+  /**
+   * \param[in]     p is the pressure   (_w  , _h  )
+   * \param[in,out] u is the x velocity (_w+1, _h  )
+   * \param[in,out] v is the y velocity (_w  , _h+1)
+   */
+  ApplyPressureFunctor(Array2d p, Array2d u, Array2d v, double scale, int w, int h) :
+    _p(p),
+    _u(_u),
+    _v(_v),
+    scale(scale),
+    _w(w),
+    _h(h)
+  {};
 
-//   /* Sets fluid quantity inside the given rect to value `v' */
-//   KOKKOS_INLINE_FUNCTION
-//   void operator() (const int& index) const
-//   {
+  // static method which does it all: create and execute functor
+  static void apply(Array2d p, Array2d u, Array2d v, double scale, int w, int h)
+  {
+    const int size = w*h;
+    ApplyPressureFunctor functor(p, u, v, scale, w, h);
+    Kokkos::parallel_for(size, functor);
+  }
 
-//     // this functor is supposed to be launched with _w*_h iterations
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    // this functor is supposed to be launched with _w*_h iterations
     
-//     int ix, iy;
-//     index2coord(index,x,y,_w,_h);
+    int x, y;
+    index2coord(index,x,y,_w,_h);
 
-//     _u(x,     y    ) -= scale * _p(x,y);
-//     _u(x + 1, y    ) += scale * _p(x,y);
-//     _v(x,     y    ) -= scale * _p(x,y);
-//     _v(x,     y + 1) += scale * _p(x,y);
+    _u(x,     y    ) -= scale * _p(x,y);
+    _u(x + 1, y    ) += scale * _p(x,y);
+    _v(x,     y    ) -= scale * _p(x,y);
+    _v(x,     y + 1) += scale * _p(x,y);
 
-//     // deal with extra borders (left and right),
-//     // !!! beware u is sized _w+1,_h
-//     // !!! beware v is sized _w  ,_h+1
-//     if (x==0) {
-//       _u(0,y ) = 0.0;
-//       _u(_w,y) = 0.0;
-//     }
+    // deal with extra borders (left and right),
+    // !!! beware u is sized _w+1,_h
+    // !!! beware v is sized _w  ,_h+1
+    if (x==0) {
+      _u(0 , y ) = 0.0;
+      _u(_w, y ) = 0.0;
+    }
 
-//     if (y==0) {
-//       _v(x,0 ) = 0.0;
-//       _v(x,_h) = 0.0;
-//     }
+    if (y==0) {
+      _v(x , 0 ) = 0.0;
+      _v(x , _h) = 0.0;
+    }
     
-//   } // operator()
+  } // operator()
 
-//   Array2d _p;
-//   Array2d _u, _v;
-//   double scale;
-//   int _w,_h;
+  Array2d _p;
+  Array2d _u, _v;
+  double scale;
+  int _w,_h;
   
-// } // class ApplyPressureFunctor
+}; // class ApplyPressureFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * MaxVelocity functor.
+ *
+ *  Returns the maximum allowed timestep. Note that the actual timestep
+ *  taken should usually be much below this to ensure accurate
+ *  simulation - just never above.
+ *
+ */
+class MaxVelocityFunctor
+{
+
+public:
+
+  /**
+   * \param[in]     r is the RHS   (_w  , _h  )
+   * \param[in,out] u is the x velocity (_w+1, _h  )
+   * \param[in,out] v is the y velocity (_w  , _h+1)
+   */
+  MaxVelocityFunctor(FluidQuantity u, FluidQuantity v, int w, int h) :
+    _u(u),
+    _v(v),
+    _w(w),
+    _h(h)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(FluidQuantity u, FluidQuantity v, double& maxVelocity,
+		    int w, int h)
+  {
+    const int size = w*h;
+    MaxVelocityFunctor functor(u, v, w, h);
+    Kokkos::parallel_reduce(size, functor, maxVelocity);
+  }
+
+  // Tell each thread how to initialize its reduction result.
+  KOKKOS_INLINE_FUNCTION
+  void init (double& dst) const
+  {
+    // The identity under max is -Inf.
+    // Kokkos does not come with a portable way to access
+    // floating-point Inf and NaN. 
+#ifdef __CUDA_ARCH__
+    dst = -CUDART_INF;
+#else
+    dst = std::numeric_limits<double>::min();
+#endif // __CUDA_ARCH__
+  } // init
+
+  // this is were "action" / reduction takes place
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index, double& maxVelocity) const
+  {
+
+    int x, y;
+    index2coord(index,x,y,_w,_h);
+
+    /* Average velocity at grid cell center */
+    double u = _u.lerp(x + 0.5, y + 0.5);
+    double v = _v.lerp(x + 0.5, y + 0.5);
+    
+    double velocity = sqrt(u*u + v*v);
+    maxVelocity = fmax(maxVelocity, velocity);
+        
+  } // operator()
+  
+  // "Join" intermediate results from different threads.
+  // This should normally implement the same reduction
+  // operation as operator() above. Note that both input
+  // arguments MUST be declared volatile.
+  KOKKOS_INLINE_FUNCTION
+  void join (volatile double& dst,
+             const volatile double& src) const
+  {
+    // max reduce
+    if (dst < src) {
+      dst = src;
+    }
+  } // join
+
+  FluidQuantity _u, _v;
+  int _w,_h;
+  
+}; // class MaxVelocityFunctor
 
 #endif // FLUID_FUNCTORS_H_
