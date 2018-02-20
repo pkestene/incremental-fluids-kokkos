@@ -380,4 +380,111 @@ public:
   
 }; // class MaxVelocityFunctor
 
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * \class ProjectFunctor
+ * 
+ * Performs the pressure solve using Gauss-Seidel.
+ * The solver will run as long as it takes to get the relative error below
+ * a threshold, but will never exceed 'limit' iterations
+ */
+class ProjectFunctor
+{
+
+public:
+
+  /**
+   * \param[in,out] p is the pressure (_w  , _h  )
+   * \param[in]     r is the RHS      (_w  , _h  )
+   */
+  ProjectFunctor(Array2d p, Array2d r, double scale, int w, int h) :
+    _p(p),
+    _r(r),
+    _scale(scale),
+    _w(w),
+    _h(h)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d p, Array2d r, double scale, double& maxDelta,
+		    int w, int h)
+  {
+    const int size = w*h;
+    ProjectFunctor functor(p, r, scale, w, h);
+    Kokkos::parallel_reduce(size, functor, maxDelta);
+  }
+
+  // Tell each thread how to initialize its reduction result.
+  KOKKOS_INLINE_FUNCTION
+  void init (double& dst) const
+  {
+    // The identity under max is -Inf.
+    // Kokkos does not come with a portable way to access
+    // floating-point Inf and NaN. 
+#ifdef __CUDA_ARCH__
+    dst = -CUDART_INF;
+#else
+    dst = std::numeric_limits<double>::min();
+#endif // __CUDA_ARCH__
+  } // init
+
+  // this is were "action" / reduction takes place
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index, double& maxDelta) const
+  {
+
+    int x, y;
+    index2coord(index,x,y,_w,_h);
+
+    double diag = 0.0, offDiag = 0.0;
+    
+    /* Here we build the matrix implicitly as the five-point
+     * stencil. Grid borders are assumed to be solid, i.e.
+     * there is no fluid outside the simulation domain.
+     */
+    if (x > 0) {
+      diag    += _scale;
+      offDiag -= _scale*_p(x - 1, y    );
+    }
+    if (y > 0) {
+      diag    += _scale;
+      offDiag -= _scale*_p(x    , y - 1);
+    }
+    if (x < _w - 1) {
+      diag    += _scale;
+      offDiag -= _scale*_p(x + 1, y    );
+    }
+    if (y < _h - 1) {
+      diag    += _scale;
+      offDiag -= _scale*_p(x    , y + 1);
+    }
+    
+    double newP = ( _r(x,y) - offDiag ) / diag;
+
+    maxDelta = fmax(maxDelta, fabs(_p(x,y) - newP));
+        
+  } // operator()
+  
+  // "Join" intermediate results from different threads.
+  // This should normally implement the same reduction
+  // operation as operator() above. Note that both input
+  // arguments MUST be declared volatile.
+  KOKKOS_INLINE_FUNCTION
+  void join (volatile double& dst,
+             const volatile double& src) const
+  {
+    // max reduce
+    if (dst < src) {
+      dst = src;
+    }
+  } // join
+
+  Array2d _p, _r;
+  double _scale;
+  int _w,_h;
+  
+}; // class ProjectFunctor
+
 #endif // FLUID_FUNCTORS_H_

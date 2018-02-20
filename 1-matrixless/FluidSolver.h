@@ -45,54 +45,24 @@ class FluidSolver {
    * a threshold, but will never exceed `limit' iterations
    */
   void project(int limit, double timestep) {
-    // double scale = timestep/(_density*_hx*_hx);
+    double scale = timestep/(_density*_hx*_hx);
         
-    // double maxDelta;
-    // for (int iter = 0; iter < limit; iter++) {
-    //   maxDelta = 0.0;
-    //   for (int y = 0, idx = 0; y < _h; y++) {
-    // 	for (int x = 0; x < _w; x++, idx++) {
-    // 	  int idx = x + y*_w;
-                    
-    // 	  double diag = 0.0, offDiag = 0.0;
-                    
-    // 	  /* Here we build the matrix implicitly as the five-point
-    // 	   * stencil. Grid borders are assumed to be solid, i.e.
-    // 	   * there is no fluid outside the simulation domain.
-    // 	   */
-    // 	  if (x > 0) {
-    // 	    diag    += scale;
-    // 	    offDiag -= scale*_p[idx - 1];
-    // 	  }
-    // 	  if (y > 0) {
-    // 	    diag    += scale;
-    // 	    offDiag -= scale*_p[idx - _w];
-    // 	  }
-    // 	  if (x < _w - 1) {
-    // 	    diag    += scale;
-    // 	    offDiag -= scale*_p[idx + 1];
-    // 	  }
-    // 	  if (y < _h - 1) {
-    // 	    diag    += scale;
-    // 	    offDiag -= scale*_p[idx + _w];
-    // 	  }
+    double maxDelta;
+    for (int iter = 0; iter < limit; iter++) {
+      maxDelta = 0.0;
 
-    // 	  double newP = (_r[idx] - offDiag)/diag;
-                    
-    // 	  maxDelta = max(maxDelta, fabs(_p[idx] - newP));
-                    
-    // 	  _p[idx] = newP;
-    // 	}
-    //   }
+      ProjectFunctor::apply(_p, _r, scale, maxDelta, _w, _h);
 
-    //   if (maxDelta < 1e-5) {
-    // 	printf("Exiting solver after %d iterations, maximum change is %f\n", iter, maxDelta);
-    // 	return;
-    //   }
-    // }
+	
+      if (maxDelta < 1e-5) {
+    	printf("Exiting solver after %d iterations, maximum change is %f\n", iter, maxDelta);
+    	return;
+      }
+    } // for iter
         
-    // printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
-  }
+    printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
+    
+  } // project
     
   void applyPressure(double timestep) {
 
@@ -117,7 +87,7 @@ public:
     
     // Array2d are ref counted
     _r = Array2d("pressure_rhs",_w,_h);
-    _p = Array2d("pressure",_w*_h);
+    _p = Array2d("pressure",_w,_h);
         
   }
     
