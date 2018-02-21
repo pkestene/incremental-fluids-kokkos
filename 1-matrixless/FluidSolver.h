@@ -28,8 +28,9 @@ class FluidSolver {
   double _density;
     
   /* Arrays for: */
-  Array2d _r; /* Right hand side of pressure solve */
-  Array2d _p; /* Pressure solution */
+  Array2d _r;  /* Right hand side of pressure solve */
+  Array2d _p;  /* Pressure solution */
+  Array2d _p2; /* Pressure solution */
     
   /* Builds the pressure right hand side as the negative divergence */
   void buildRhs() {
@@ -37,20 +38,7 @@ class FluidSolver {
     double scale = 1.0/_hx;
 
     BuildRHSFunctor::apply(_r, _u->_src, _v->_src, scale, _w, _h);
-
-    printf("KKK %.10f | %.10f %.10f %.10f %.10f | %.10f \n", scale,
-	   _u->_src(0 + 1, 0), _u->_src(0, 0),
-	   _v->_src(0, 0 + 1), _v->_src(0, 0),
-	   -scale * (_u->_src(0 + 1, 0    ) - _u->_src(0, 0) +
-		     _v->_src(0    , 0 + 1) - _v->_src(0, 0) ));
     
-    for (int j=0; j<5; ++j) {
-      for (int i=0; i<5; ++i) {
-	printf("%.10f ",_r(i,j));
-      }
-      printf("\n");
-    }
- 
   }
 
   /* Performs the pressure solve using Gauss-Seidel.
@@ -65,10 +53,9 @@ class FluidSolver {
     for (int iter = 0; iter < limit; iter++) {
       maxDelta = 0.0;
 
-      ProjectFunctor::apply(_p, _r, scale, maxDelta, _w, _h);
-
-      printf("MMMMMM iter %d max %f\n",iter,maxDelta);
-
+      ProjectFunctor::apply(_p, _p2, _r, scale, maxDelta, _w, _h);
+      //Kokkos::deep_copy(_p,_p2);
+      
       if (maxDelta < 1e-5) {
     	printf("Exiting solver after %d iterations, maximum change is %f\n", iter, maxDelta);
     	return;
@@ -77,14 +64,7 @@ class FluidSolver {
 
     
     printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
-    
-    for (int j=0; j<5; ++j) {
-      for (int i=0; i<5; ++i) {
-      	  printf("p=%.10f ",_p(i,j));
-      }
-      printf("\n");
-    }
-          
+              
   } // project
     
   void applyPressure(double timestep) {
@@ -109,8 +89,9 @@ public:
     _src_host = Array2dHost("data_on_host",_w,_h);
     
     // Array2d are ref counted
-    _r = Array2d("pressure_rhs",_w,_h);
-    _p = Array2d("pressure"    ,_w,_h);
+    _r  = Array2d("pressure_rhs",_w,_h);
+    _p  = Array2d("pressure"    ,_w,_h);
+    _p2 = Array2d("pressure_new",_w,_h);
 
   }
     

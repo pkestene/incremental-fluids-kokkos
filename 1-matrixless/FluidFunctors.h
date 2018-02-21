@@ -267,14 +267,19 @@ public:
   {
 
     // this functor is supposed to be launched with _w*_h iterations
+    // it has been slightly modified (compared to serial version)
+    // to avoid data race
     
     int x, y;
     index2coord(index,x,y,_w,_h);
 
-    _u(x,     y    ) -= _scale * _p(x,y);
-    _u(x + 1, y    ) += _scale * _p(x,y);
-    _v(x,     y    ) -= _scale * _p(x,y);
-    _v(x,     y + 1) += _scale * _p(x,y);
+    _u(x, y) -= _scale * _p(x  ,y  );
+    if (x>0)
+      _u(x, y) += _scale * _p(x-1,y  );
+    
+    _v(x, y) -= _scale * _p(x  ,y  );
+    if (y>0)
+      _v(x, y) += _scale * _p(x  ,y-1);
 
     // deal with extra borders (left and right),
     // !!! beware u is sized _w+1,_h
@@ -404,8 +409,9 @@ public:
    * \param[in,out] p is the pressure (_w  , _h  )
    * \param[in]     r is the RHS      (_w  , _h  )
    */
-  ProjectFunctor(Array2d p, Array2d r, double scale, int w, int h) :
+  ProjectFunctor(Array2d p, Array2d p2, Array2d r, double scale, int w, int h) :
     _p(p),
+    _p2(p2),
     _r(r),
     _scale(scale),
     _w(w),
@@ -413,11 +419,12 @@ public:
   {};
 
   // static method which does it all: create and execute functor
-  static void apply(Array2d p, Array2d r, double scale, double& maxDelta,
+  static void apply(Array2d p, Array2d p2, Array2d r, double scale,
+		    double& maxDelta,
 		    int w, int h)
   {
     const int size = w*h;
-    ProjectFunctor functor(p, r, scale, w, h);
+    ProjectFunctor functor(p, p2, r, scale, w, h);
     Kokkos::parallel_reduce(size, functor, maxDelta);
   }
 
@@ -465,11 +472,7 @@ public:
       diag    += _scale;
       offDiag -= _scale*_p(x    , y + 1);
     }
-    
-    // if (x==0 and y==0) {
-    //   printf("PPP %f %f %f\n\n",_scale,diag,offDiag);
-    // }
-    
+        
     double newP = ( _r(x,y) - offDiag ) / diag;
 
     maxDelta = fmax(maxDelta, fabs(_p(x,y) - newP));
@@ -492,7 +495,7 @@ public:
     }
   } // join
 
-  Array2d _p, _r;
+  Array2d _p, _p2, _r;
   double _scale;
   int _w,_h;
   

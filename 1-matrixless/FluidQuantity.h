@@ -56,24 +56,11 @@ public:
     
   void flip() {
 
-    //_flip ^= (uint8_t) 1;
-
-    printf("KK1 %p %p\n",_src.ptr_on_device(),_dst.ptr_on_device());
-    
-    // this is so dirty....
-    // it only works because _src and _dst have exactly the same layout, extent, ....
-    //double * tmp1 = _src.ptr_on_device();
-    //double * tmp2 = _dst.ptr_on_device();
-    //std::swap(tmp1, tmp2);
-    //std::swap(_src.data(), _dst.data());
-
     Array2d tmp1(std::move(_src));
     Array2d tmp2(std::move(_dst));
     _src = tmp2;
     _dst = tmp1;
       
-    printf("KK2 %p %p\n",_src.ptr_on_device(),_dst.ptr_on_device());
-    
   }
   
   Array2d& src() {
