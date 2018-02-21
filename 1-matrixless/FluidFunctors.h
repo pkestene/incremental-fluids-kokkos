@@ -112,7 +112,7 @@ public:
   /**
    * \param[in,out] data is a scalar quantity array to add inflow to
    */
-  InflowFunctor(FluidQuantity fq, double v, double x0, double y0, double x1, double y1) :
+  InflowFunctor(FluidQuantity& fq, double v, double x0, double y0, double x1, double y1) :
     _w(fq._w),
     _h(fq._h),
     _ox(fq._ox),
@@ -126,10 +126,11 @@ public:
 
     iy0 = (int)(y0/_hx - _oy); iy0 = iy0>0  ? iy0 : 0;
     iy1 = (int)(y1/_hx - _oy); iy1 = iy1<_h ? iy1 : _h;
+
   };
 
   // static method which does it all: create and execute functor
-  static void apply(FluidQuantity fq,
+  static void apply(FluidQuantity& fq,
 		    double v,
 		    double x0, double y0, double x1, double y1)
   {
@@ -240,17 +241,21 @@ public:
    * \param[in,out] u is the x velocity (_w+1, _h  )
    * \param[in,out] v is the y velocity (_w  , _h+1)
    */
-  ApplyPressureFunctor(Array2d p, Array2d u, Array2d v, double scale, int w, int h) :
+  ApplyPressureFunctor(Array2d p,
+		       Array2d u, Array2d v,
+		       double scale, int w, int h) :
     _p(p),
-    _u(_u),
-    _v(_v),
-    scale(scale),
+    _u(u),
+    _v(v),
+    _scale(scale),
     _w(w),
     _h(h)
   {};
 
   // static method which does it all: create and execute functor
-  static void apply(Array2d p, Array2d u, Array2d v, double scale, int w, int h)
+  static void apply(Array2d p,
+		    Array2d u, Array2d v,
+		    double scale, int w, int h)
   {
     const int size = w*h;
     ApplyPressureFunctor functor(p, u, v, scale, w, h);
@@ -266,10 +271,10 @@ public:
     int x, y;
     index2coord(index,x,y,_w,_h);
 
-    _u(x,     y    ) -= scale * _p(x,y);
-    _u(x + 1, y    ) += scale * _p(x,y);
-    _v(x,     y    ) -= scale * _p(x,y);
-    _v(x,     y + 1) += scale * _p(x,y);
+    _u(x,     y    ) -= _scale * _p(x,y);
+    _u(x + 1, y    ) += _scale * _p(x,y);
+    _v(x,     y    ) -= _scale * _p(x,y);
+    _v(x,     y + 1) += _scale * _p(x,y);
 
     // deal with extra borders (left and right),
     // !!! beware u is sized _w+1,_h
@@ -288,7 +293,7 @@ public:
 
   Array2d _p;
   Array2d _u, _v;
-  double scale;
+  double _scale;
   int _w,_h;
   
 }; // class ApplyPressureFunctor
@@ -461,10 +466,16 @@ public:
       offDiag -= _scale*_p(x    , y + 1);
     }
     
+    // if (x==0 and y==0) {
+    //   printf("PPP %f %f %f\n\n",_scale,diag,offDiag);
+    // }
+    
     double newP = ( _r(x,y) - offDiag ) / diag;
 
     maxDelta = fmax(maxDelta, fabs(_p(x,y) - newP));
-        
+
+    _p(x,y) = newP;
+
   } // operator()
   
   // "Join" intermediate results from different threads.

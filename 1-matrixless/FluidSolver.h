@@ -36,8 +36,21 @@ class FluidSolver {
 
     double scale = 1.0/_hx;
 
-    BuildRHSFunctor::apply(_r, _u->src(), _v->src(), scale, _w, _h);
+    BuildRHSFunctor::apply(_r, _u->_src, _v->_src, scale, _w, _h);
+
+    printf("KKK %.10f | %.10f %.10f %.10f %.10f | %.10f \n", scale,
+	   _u->_src(0 + 1, 0), _u->_src(0, 0),
+	   _v->_src(0, 0 + 1), _v->_src(0, 0),
+	   -scale * (_u->_src(0 + 1, 0    ) - _u->_src(0, 0) +
+		     _v->_src(0    , 0 + 1) - _v->_src(0, 0) ));
     
+    for (int j=0; j<5; ++j) {
+      for (int i=0; i<5; ++i) {
+	printf("%.10f ",_r(i,j));
+      }
+      printf("\n");
+    }
+ 
   }
 
   /* Performs the pressure solve using Gauss-Seidel.
@@ -45,6 +58,7 @@ class FluidSolver {
    * a threshold, but will never exceed `limit' iterations
    */
   void project(int limit, double timestep) {
+
     double scale = timestep/(_density*_hx*_hx);
         
     double maxDelta;
@@ -53,22 +67,31 @@ class FluidSolver {
 
       ProjectFunctor::apply(_p, _r, scale, maxDelta, _w, _h);
 
-	
+      printf("MMMMMM iter %d max %f\n",iter,maxDelta);
+
       if (maxDelta < 1e-5) {
     	printf("Exiting solver after %d iterations, maximum change is %f\n", iter, maxDelta);
     	return;
       }
     } // for iter
-        
+
+    
     printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
     
+    for (int j=0; j<5; ++j) {
+      for (int i=0; i<5; ++i) {
+      	  printf("p=%.10f ",_p(i,j));
+      }
+      printf("\n");
+    }
+          
   } // project
     
   void applyPressure(double timestep) {
 
     double scale = timestep/(_density*_hx);
 
-    ApplyPressureFunctor::apply(_p, _u->src(), _v->src(), scale, _w, _h);
+    ApplyPressureFunctor::apply(_p, _u->_src, _v->_src, scale, _w, _h);
 
   }
     
@@ -87,8 +110,8 @@ public:
     
     // Array2d are ref counted
     _r = Array2d("pressure_rhs",_w,_h);
-    _p = Array2d("pressure",_w,_h);
-        
+    _p = Array2d("pressure"    ,_w,_h);
+
   }
     
   ~FluidSolver() {
@@ -104,7 +127,7 @@ public:
     
     AdvectionFunctor::apply(*_d,*_u,*_v,timestep);
     AdvectionFunctor::apply(*_u,*_u,*_v,timestep);
-    AdvectionFunctor::apply(*_u,*_u,*_v,timestep);
+    AdvectionFunctor::apply(*_v,*_u,*_v,timestep);
         
     /* Make effect of advection visible, since it's not an in-place operation */
     _d->flip();
@@ -118,7 +141,7 @@ public:
     InflowFunctor::apply(*_d, d, x, y, x + w, y + h);
     InflowFunctor::apply(*_u, u, x, y, x + w, y + h);
     InflowFunctor::apply(*_v, v, x, y, x + w, y + h);
-    
+
   }
     
   /* Returns the maximum allowed timestep. Note that the actual timestep
@@ -144,7 +167,7 @@ public:
 
     // copy current density array to a temporary destination on "host"
     // which can then be used to save data to a file
-    Kokkos::deep_copy(_src_host, _d->src());
+    Kokkos::deep_copy(_src_host, _d->_src);
 
     double *data = _src_host.ptr_on_device();
     
