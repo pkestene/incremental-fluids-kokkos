@@ -5,6 +5,11 @@
 #include "FluidQuantity.h"
 #include "FluidFunctors.h"
 
+enum ITER_TYPE {
+  ITER_GAUSS_SEIDEL,
+  ITER_JACOBI
+};
+
 // =========================================================================
 // =========================================================================
 /* Fluid solver class. Sets up the fluid quantities, forces incompressibility
@@ -31,7 +36,10 @@ class FluidSolver {
   Array2d _r;  /* Right hand side of pressure solve */
   Array2d _p;  /* Pressure solution */
   Array2d _p2; /* Pressure solution */
-    
+
+  int iteration_type = ITER_GAUSS_SEIDEL;
+  //int iteration_type = ITER_JACOBI;
+  
   /* Builds the pressure right hand side as the negative divergence */
   void buildRhs() {
 
@@ -53,8 +61,13 @@ class FluidSolver {
     for (int iter = 0; iter < limit; iter++) {
       maxDelta = 0.0;
 
-      ProjectFunctor::apply(_p, _p2, _r, scale, maxDelta, _w, _h);
-      //Kokkos::deep_copy(_p,_p2);
+      if (iteration_type == ITER_GAUSS_SEIDEL) {
+	ProjectFunctor_GaussSeidel::apply(_p, _r, scale, maxDelta, _w, _h);
+      } else {
+	ProjectFunctor_Jacobi::apply(_p, _p2, _r, scale, maxDelta, _w, _h);
+	// the following deep copy could be avoided by swapping _p and _p2
+	Kokkos::deep_copy(_p,_p2);
+      }
       
       if (maxDelta < 1e-5) {
     	printf("Exiting solver after %d iterations, maximum change is %f\n", iter, maxDelta);
@@ -91,7 +104,10 @@ public:
     // Array2d are ref counted
     _r  = Array2d("pressure_rhs",_w,_h);
     _p  = Array2d("pressure"    ,_w,_h);
-    _p2 = Array2d("pressure_new",_w,_h);
+
+    // _p2 is only needed when doing Jacobi iterations
+    if (iteration_type == ITER_JACOBI)
+      _p2 = Array2d("pressure_new",_w,_h);
 
   }
     
