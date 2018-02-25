@@ -37,8 +37,8 @@ class FluidSolver {
   Array2d _p;  /* Pressure solution */
   Array2d _p2; /* Pressure solution */
 
-  //int iteration_type = ITER_GAUSS_SEIDEL;
-  int iteration_type = ITER_JACOBI;
+  int iteration_type = ITER_GAUSS_SEIDEL;
+  //int iteration_type = ITER_JACOBI;
   
   /* Builds the pressure right hand side as the negative divergence */
   void buildRhs() {
