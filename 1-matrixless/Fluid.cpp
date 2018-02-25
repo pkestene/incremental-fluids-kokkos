@@ -38,8 +38,8 @@ int main(int argc, char* argv[])
 
   Kokkos::initialize(argc, argv);
   
-  int rank=0;
-  int nRanks=1;
+  //int rank=0;
+  //int nRanks=1;
   
   {
     std::cout << "##########################\n";
