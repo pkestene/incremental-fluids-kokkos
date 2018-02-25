@@ -193,8 +193,6 @@ public:
       if (fabs(data(ix,iy)) < fabs(vi))
 	data(ix,iy) = vi;
       
-      if ( fabs(data(ix,iy)) < fabs(v) )
-	data(ix,iy) = v;
     }
    
   } // end operator()

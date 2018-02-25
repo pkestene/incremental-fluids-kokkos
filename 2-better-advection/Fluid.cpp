@@ -29,7 +29,6 @@
 
 #include "FluidQuantity.h"
 #include "FluidFunctors.h"
-
 #include "FluidSolver.h"
 
 // =========================================================================
