@@ -37,8 +37,8 @@ class FluidSolver {
   Array2d _p;  /* Pressure solution */
   Array2d _p2; /* Pressure solution */
 
-  int iteration_type = ITER_GAUSS_SEIDEL;
-  //int iteration_type = ITER_JACOBI;
+  //int iteration_type = ITER_GAUSS_SEIDEL;
+  int iteration_type = ITER_JACOBI;
   
   /* Builds the pressure right hand side as the negative divergence */
   void buildRhs() {
@@ -144,20 +144,22 @@ public:
   /* Returns the maximum allowed timestep. Note that the actual timestep
    * taken should usually be much below this to ensure accurate
    * simulation - just never above.
+   *
+   * Not used.
    */
-  double maxTimestep() {
+  // double maxTimestep() {
     
-    double maxVelocity = 0.0;
+  //   double maxVelocity = 0.0;
 
-    MaxVelocityFunctor::apply(*_u, *_v, maxVelocity, _w, _h);
+  //   MaxVelocityFunctor::apply(*_u, *_v, maxVelocity, _w, _h);
     
-    /* Fluid should not flow more than two grid cells per iteration */
-    double maxTimestep = 2.0*_hx/maxVelocity;
+  //   /* Fluid should not flow more than two grid cells per iteration */
+  //   double maxTimestep = 2.0*_hx/maxVelocity;
         
-    /* Clamp to sensible maximum value in case of very small velocities */
-    return std::min(maxTimestep, 1.0);
+  //   /* Clamp to sensible maximum value in case of very small velocities */
+  //   return std::min(maxTimestep, 1.0);
     
-  }
+  // }
     
   /* Convert fluid density to RGBA image */
   void toImage(unsigned char *rgba) {

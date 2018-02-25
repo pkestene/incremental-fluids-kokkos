@@ -39,8 +39,8 @@ int main(int argc, char* argv[])
 
   Kokkos::initialize(argc, argv);
   
-  int rank=0;
-  int nRanks=1;
+  //int rank=0;
+  //int nRanks=1;
   
   {
     std::cout << "##########################\n";
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
     
     /* Use four substeps per iteration */
     for (int i = 0; i < 20; i++) {
-      solver->addInflow(0.45, 0.2, 0.1, 0.01, 1.0, 0.0, 3.0);
+      solver->addInflow(0.45, 0.2, 0.15, 0.03, 1.0, 0.0, 3.0);
       solver->update(timestep);
       time += timestep;
       fflush(stdout);

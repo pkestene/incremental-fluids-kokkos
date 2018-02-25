@@ -5,10 +5,20 @@
 
 // some utilities
 
+KOKKOS_INLINE_FUNCTION
+int imin(int i, int j) {
+  return i<j ? i : j;
+} // imin
+
+KOKKOS_INLINE_FUNCTION
+int imax(int i, int j) {
+  return i<j ? j : i;
+} // imax
+
 /* Length of vector (x, y) */
 KOKKOS_INLINE_FUNCTION
-double length(double x, double y) const {
-    return sqrt(x*x + y*y);
+double length(double x, double y) {
+  return sqrt(x*x + y*y);
 }
 
 /* Cubic pulse function.
@@ -17,9 +27,9 @@ double length(double x, double y) const {
  * Smoothly interpolates between 0 and 1 between these three points.
  */
 KOKKOS_INLINE_FUNCTION
-double cubicPulse(double x) const {
-    x = min(fabs(x), 1.0);
-    return 1.0 - x*x*(3.0 - 2.0*x);
+double cubicPulse(double x) {
+  x = fmin(fabs(x), 1.0);
+  return 1.0 - x*x*(3.0 - 2.0*x);
 }
 
 /* This is the class representing fluid quantities such as density and velocity
@@ -59,33 +69,56 @@ public:
   double lerp(double a, double b, double x) const {
     return a*(1.0 - x) + b*x;
   }
-  
+
+  /* Cubic intERPolate using samples a through d for x ranging from 0 to 1.
+   * A Catmull-Rom spline is used. Over- and undershoots are clamped to
+   * prevent blow-up.
+   */
+  KOKKOS_INLINE_FUNCTION
+  double cerp(double a, double b, double c, double d, double x) const {
+
+    double xsq = x*x;
+    double xcu = xsq*x;
+    
+    double minV = fmin(a, fmin(b, fmin(c, d)));
+    double maxV = fmax(a, fmax(b, fmax(c, d)));
+    
+    double t =
+      a*(0.0 - 0.5*x + 1.0*xsq - 0.5*xcu) +
+      b*(1.0 + 0.0*x - 2.5*xsq + 1.5*xcu) +
+      c*(0.0 + 0.5*x + 2.0*xsq - 1.5*xcu) +
+      d*(0.0 + 0.0*x - 0.5*xsq + 0.5*xcu);
+    
+    return fmin(fmax(t, minV), maxV);
+    
+  } // cerp
+
 public:
   FluidQuantity(int w, int h, double ox, double oy, double hx)
     : _w(w), _h(h), _ox(ox), _oy(oy), _hx(hx) {
-
+    
     // kokkos view are initialized to zero
     _src = Array2d("_src",_w,_h);
     _dst = Array2d("_dst",_w,_h);
-
-  }
     
+  }
+  
   ~FluidQuantity() {
   }
-    
+  
   void flip() {
-
+    
     Array2d tmp1(std::move(_src));
     Array2d tmp2(std::move(_dst));
     _src = tmp2;
     _dst = tmp1;
-      
+    
   }
   
   Array2d& src() {
-      return _src;
+    return _src;
   }
-
+  
   /* Read-only and read-write access to grid cells */
   KOKKOS_INLINE_FUNCTION
   double at(int x, int y) const {
@@ -113,7 +146,31 @@ public:
     return lerp(lerp(x00, x10, x), lerp(x01, x11, x), y);
     
   } // lerp
+
+  /* Cubic intERPolate on grid at coordinates (x, y).
+   * Coordinates will be clamped to lie in simulation domain
+   */
+  KOKKOS_INLINE_FUNCTION
+  double cerp(double x, double y) const {
+
+    x = fmin(fmax(x - _ox, 0.0), _w - 1.001);
+    y = fmin(fmax(y - _oy, 0.0), _h - 1.001);
+    int ix = (int)x;
+    int iy = (int)y;
+    x -= ix;
+    y -= iy;
     
+    int x0 = imax(ix - 1, 0), x1 = ix, x2 = ix + 1, x3 = imin(ix + 2, _w - 1);
+    int y0 = imax(iy - 1, 0), y1 = iy, y2 = iy + 1, y3 = imin(iy + 2, _h - 1);
+    
+    double q0 = cerp(at(x0, y0), at(x1, y0), at(x2, y0), at(x3, y0), x);
+    double q1 = cerp(at(x0, y1), at(x1, y1), at(x2, y1), at(x3, y1), x);
+    double q2 = cerp(at(x0, y2), at(x1, y2), at(x2, y2), at(x3, y2), x);
+    double q3 = cerp(at(x0, y3), at(x1, y3), at(x2, y3), at(x3, y3), x);
+    
+    return cerp(q0, q1, q2, q3, y);
+  }
+  
 }; // class FluidQuantity
 
 #endif // FLUID_QUANTITY_H_

@@ -65,6 +65,32 @@ public:
     
   } // euler
   
+  /* Third order Runge-Kutta for velocity integration in time */
+  KOKKOS_INLINE_FUNCTION
+  void rungeKutta3(double &x,
+		   double &y) const {
+    
+    double firstU = u.lerp(x, y)/_hx;
+    double firstV = v.lerp(x, y)/_hx;
+    
+    double midX = x - 0.5*timestep*firstU;
+    double midY = y - 0.5*timestep*firstV;
+    
+    double midU = u.lerp(midX, midY)/_hx;
+    double midV = v.lerp(midX, midY)/_hx;
+    
+    double lastX = x - 0.75*timestep*midU;
+    double lastY = y - 0.75*timestep*midV;
+    
+    double lastU = u.lerp(lastX, lastY);
+    double lastV = v.lerp(lastX, lastY);
+    
+    x -= timestep*((2.0/9.0)*firstU + (3.0/9.0)*midU + (4.0/9.0)*lastU);
+    y -= timestep*((2.0/9.0)*firstV + (3.0/9.0)*midV + (4.0/9.0)*lastV);
+    
+  } // rungeKutta3
+
+  
   // Advect grid in velocity field u, v with given timestep
   KOKKOS_INLINE_FUNCTION
   void operator() (const int& index) const
@@ -79,10 +105,10 @@ public:
     double y = iy + _oy;
     
     // First component: Integrate in time, update x and y
-    euler(x, y);
+    rungeKutta3(x, y);
     
     // Second component: Interpolate from grid
-    data._dst(ix,iy) = data.lerp(x, y);
+    data._dst(ix,iy) = data.cerp(x, y);
     
   } // advection functor - operator()
   
@@ -103,6 +129,10 @@ public:
 // ==================================================================
 /**
  * Inflow functor.
+ *
+ * Set fluid quantity inside the given rect to the specified value, but use
+ * a smooth falloff to avoid oscillations
+ *
  */
 class InflowFunctor
 {
@@ -113,6 +143,10 @@ public:
    * \param[in,out] data is a scalar quantity array to add inflow to
    */
   InflowFunctor(FluidQuantity& fq, double v, double x0, double y0, double x1, double y1) :
+    x0(x0),
+    y0(y0),
+    x1(x1),
+    y1(y1),
     _w(fq._w),
     _h(fq._h),
     _ox(fq._ox),
@@ -151,12 +185,21 @@ public:
 
     if (ix >= ix0 and ix<ix1 and
 	iy >= iy0 and iy<iy1 ) {
+      double l = length(
+			(2.0*(ix + 0.5)*_hx - (x0 + x1))/(x1 - x0),
+			(2.0*(iy + 0.5)*_hx - (y0 + y1))/(y1 - y0)
+			);
+      double vi = cubicPulse(l)*v;
+      if (fabs(data(ix,iy)) < fabs(vi))
+	data(ix,iy) = vi;
+      
       if ( fabs(data(ix,iy)) < fabs(v) )
 	data(ix,iy) = v;
     }
    
   } // end operator()
 
+  double x0, y0, x1, y1;
   int _w, _h;
   double _ox, _oy;
   double _hx;
@@ -450,7 +493,7 @@ public:
   KOKKOS_INLINE_FUNCTION
   void operator() (const int& index, double& maxDelta) const
   {
-
+    
     int x, y;
     index2coord(index,x,y,_w,_h);
 
