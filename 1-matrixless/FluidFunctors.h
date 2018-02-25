@@ -103,6 +103,9 @@ public:
 // ==================================================================
 /**
  * Inflow functor.
+ *
+ * Sets fluid quantity inside the given rect to value `v'.
+ *
  */
 class InflowFunctor
 {
