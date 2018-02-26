@@ -438,6 +438,325 @@ public:
 // ==================================================================
 // ==================================================================
 /**
+ * Apply preconditioner to vector `a' and store it in `dst' 
+ *
+ * preditionning is devided in two steps.
+ */
+class ApplyPreconditionerFunctor
+{
+
+public:
+
+  /**
+   * \param[out] dst
+   * \param[in]  a
+   * \param[in] precon
+   * \param[in] aPlusX
+   * \param[in] aPlusY
+   * \param[in] w width
+   * \param[in] h height
+   * \param[in] step number (can only be 1 or 2)
+   */
+  ApplyPreconditionerFunctor(Array2d dst, Array2d a,
+			     Array2d precon,
+			     Array2d aPlusX, Array2d aPlusY,
+			     int w, int h, int stepId) :
+    dst(dst),
+    a(a),
+    precon(precon),
+    aPlusX(aPlusX),
+    aPlusY(aPlusY),    
+    w(w),
+    h(h),
+    stepId(stepId)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d dst, Array2d a,
+		    Array2d precon,
+		    Array2d aPlusX, Array2d aPlusY,
+		    int w, int h, int stepId)
+  {
+    const int size = w*h;
+    ApplyPreconditionerFunctor functor(dst,a,precon,aPlusX,aPlusY,w,h,stepId);
+    Kokkos::parallel_for(size, functor);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void step1 (const int& index) const
+  {
+
+    int x, y;
+    index2coord(index,x,y,w,h);
+
+    double t = a(x,y);
+    
+    if (x > 0)
+      t -= aPlusX(x-1,y)*precon(x-1,y)*dst(x-1,y);
+    if (y > 0)
+      t -= aPlusY(x,y-1)*precon(x,y-1)*dst(x,y-1);
+    
+    dst(x,y) = t*precon(x,y);
+    
+  } // step1
+  
+  KOKKOS_INLINE_FUNCTION
+  void step2 (const int& index) const
+  {
+
+    int x, y;
+    index2coord(index,x,y,w,h);
+
+    // reverse order of sweeping
+    x = w-x;
+    y = h-y;
+    
+    double t = dst(x,y);
+    
+    if (x < w - 1)
+      t -= aPlusX(x,y)*precon(x,y)*dst(x+1,y);
+    if (y < h - 1)
+      t -= aPlusY(x,y)*precon(x,y)*dst(x,y+1);
+    
+    dst(x,y) = t*precon(x,y);
+
+  } // step2
+
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    // this functor is supposed to be launched with _w*_h iterations
+    // it has been slightly modified (compared to serial version)
+    // to avoid data race
+
+    if (stepId == 1)
+      step1(index);
+
+    if (stepId == 2)
+      step2(index);
+    
+  } // operator()
+
+  Array2d dst ,a;
+  Array2d precon;
+  Array2d aPlusX, aPlusY;
+  int w, h;
+  int stepId;
+  
+}; // class ApplyPreconditionerFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * Dot product functor.
+ *
+ *
+ */
+class DotProductFunctor
+{
+
+public:
+
+  /**
+   * \param[in]  a
+   * \param[in]  b 
+   * \param[out] r is result
+   */
+  DotProductFunctor(Array2d a, Array2d b) :
+    a(a),
+    b(b),
+    w(a.dimension_0()),
+    h(a.dimension_1())
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d a, Array2d b, double& result)
+  {
+    const int size = a.dimension_0()*a.dimension_1();
+    DotProductFunctor functor(a, b);
+    Kokkos::parallel_reduce(size, functor, result);
+  }
+
+  // Tell each thread how to initialize its reduction result.
+  KOKKOS_INLINE_FUNCTION
+  void init (double& dst) const
+  {
+    // The identity under + is 0.
+    dst = 0.0;
+  } // init
+
+  // this is were "action" / reduction takes place
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index, double& result) const
+  {
+
+    int x, y;
+    index2coord(index,x,y,w,h);
+
+    result += a(x,y)*b(x,y);
+        
+  } // operator()
+  
+  // "Join" intermediate results from different threads.
+  // This should normally implement the same reduction
+  // operation as operator() above. Note that both input
+  // arguments MUST be declared volatile.
+  KOKKOS_INLINE_FUNCTION
+  void join (volatile double& dst,
+             const volatile double& src) const
+  {
+      dst += src;
+  } // join
+
+  Array2d a, b;
+  int w,h;
+  
+}; // class DotProductFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * Matrix vector product functor.
+ *
+ *
+ */
+class MatrixVectorProductFunctor
+{
+
+public:
+
+  /**
+   * \param[in,out]  dst
+   * \param[in]  b
+   */
+  MatrixVectorProductFunctor(Array2d dst, Array2d b,
+			     Array2d aDiag,
+			     Array2d aPlusX, Array2d aPlusY) :
+    dst(dst),
+    b(b),
+    aDiag(aDiag), aPlusX(aPlusX), aPlusY(aPlusY),
+    w(dst.dimension_0()),
+    h(dst.dimension_1())
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d dst, Array2d b,
+		    Array2d aDiag,
+		    Array2d aPlusX, Array2d aPlusY)
+  {
+    const int size = dst.dimension_0()*dst.dimension_1();
+    MatrixVectorProductFunctor functor(dst, b, aDiag, aPlusX, aPlusY);
+    Kokkos::parallel_for(size, functor);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {    
+    int x, y;
+    index2coord(index,x,y,w,h);
+
+    double t = aDiag(x,y)*b(x,y);
+    
+    if (x > 0)
+      t += aPlusX(x-1,y  )*b(x-1,y  );
+    if (y > 0)
+      t += aPlusY(x  ,y-1)*b(x  ,y-1);
+    if (x < w - 1)
+      t += aPlusX(x  ,y  )*b(x+1,y  );
+    if (y < h - 1)
+      t += aPlusY(x  ,y  )*b(x  ,y+1);
+    
+    dst(x,y) = t;
+  }
+
+  Array2d dst, b;
+  Array2d aDiag, aPlusX, aPlusY;
+  int w,h;
+  
+}; // class MatrixVectorProductFunctor
+
+  
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * Infinity Norm functor.
+ *
+ *
+ */
+class InfinityNormFunctor
+{
+
+public:
+
+  /**
+   * \param[in] a an Array2d
+   */
+  InfinityNormFunctor(Array2d a) :
+    a(a),
+    w(a.dimension_0()),
+    h(a.dimension_1())
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d a, double& norm)
+  {
+    const int size = a.dimension_0()*a.dimension_1();
+    InfinityNormFunctor functor(a);
+    Kokkos::parallel_reduce(size, functor, norm);
+  }
+
+  // Tell each thread how to initialize its reduction result.
+  KOKKOS_INLINE_FUNCTION
+  void init (double& dst) const
+  {
+    // The identity under max is -Inf.
+    // Kokkos does not come with a portable way to access
+    // floating-point Inf and NaN. 
+#ifdef __CUDA_ARCH__
+    dst = -CUDART_INF;
+#else
+    dst = std::numeric_limits<double>::min();
+#endif // __CUDA_ARCH__
+  } // init
+
+  // this is were "action" / reduction takes place
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index, double& norm) const
+  {
+
+    int x, y;
+    index2coord(index,x,y,w,h);
+    norm = fmax(norm, fabs(a(x,y)));
+        
+  } // operator()
+  
+  // "Join" intermediate results from different threads.
+  // This should normally implement the same reduction
+  // operation as operator() above. Note that both input
+  // arguments MUST be declared volatile.
+  KOKKOS_INLINE_FUNCTION
+  void join (volatile double& dst,
+             const volatile double& src) const
+  {
+    // max reduce
+    if (dst < src) {
+      dst = src;
+    }
+  } // join
+
+  Array2d a;
+  int w,h;
+  
+}; // class InfinityNormFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
  * Apply pressure functor.
  *
  * Applies the computed pressure to the velocity field.

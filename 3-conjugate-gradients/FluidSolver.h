@@ -72,6 +72,57 @@ class FluidSolver {
     
   } // buildPreconditionner
 
+ /* Apply preconditioner to vector `a' and store it in `dst' */
+  void applyPreconditioner(Array2d dst, Array2d a) {
+
+    // step 1
+    ApplyPreconditionerFunctor(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1);
+    
+    // step 2
+    ApplyPreconditionerFunctor(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2);
+    
+  } // applyPreconditioner
+
+  /* Returns the dot product of vectors `a' and `b' */
+  double dotProduct(Array2d a, Array2d b) {
+    double result = 0.0;
+
+    DotProductFunctor::apply(a,b,result);
+    printf("KK %f ",result);
+    return result;
+    
+  } // dotProduct
+
+  /* Multiplies internal pressure matrix with vector `b' 
+   * and stores the result in `dst' */
+  void matrixVectorProduct(Array2d dst, Array2d b) {
+
+    MatrixVectorProductFunctor::apply(dst,b,_aDiag,_aPlusX,_aPlusY);
+    
+  }
+
+  /* Computes `dst' = `a' + `b'*`s' */
+  void scaledAdd(Array2d dst, Array2d a, Array2d b, double s) {
+
+    const int size = dst.dimension_0()*dst.dimension_1();
+    Kokkos::parallel_for(size, KOKKOS_LAMBDA(const int index) {
+	int x, y;
+	index2coord(index,x,y,_w,_h);
+	dst(x,y) = a(x,y) + b(x,y)*s;
+      });
+    
+  } // scaleAdd
+
+  /* Returns maximum absolute value in vector `a' */
+  double infinityNorm(Array2d a) {
+
+    double maxA = 0.0;
+
+    InfinityNormFunctor::apply(a,maxA);
+
+    return maxA;
+    
+  } // inifinityNorm
   
   /* Performs the pressure solve using a conjugate gradient method.
    * The solver will run as long as it takes to get the relative error below
@@ -79,28 +130,37 @@ class FluidSolver {
    */
    void project(int limit, double timestep) {
 
-    double scale = timestep/(_density*_hx*_hx);
-        
-    double maxDelta;
-    for (int iter = 0; iter < limit; iter++) {
-      maxDelta = 0.0;
+     reset_view(_p); /* Initial guess of zeroes */
+     applyPreconditioner(_z, _r);
+     Kokkos::deep_copy(_s,_z);
+     
+     double maxError = infinityNorm(_r);
+     if (maxError < 1e-5)
+       return;
+     
+     double sigma = dotProduct(_z, _r);
+     
+     for (int iter = 0; iter < limit; iter++) {
+       matrixVectorProduct(_z, _s);
+       double alpha = sigma/dotProduct(_z, _s);
+       scaledAdd(_p, _p, _s, alpha);
+       scaledAdd(_r, _r, _z, -alpha);
+       
+       maxError = infinityNorm(_r);
+       if (maxError < 1e-5) {
+	 printf("Exiting solver after %d iterations, maximum error is %f\n", iter, maxError);
+	 return;
+       }
 
-      // if (iteration_type == ITER_GAUSS_SEIDEL) {
-      // 	ProjectFunctor_GaussSeidel::apply(_p, _r, scale, maxDelta, _w, _h);
-      // } else {
-      // 	ProjectFunctor_Jacobi::apply(_p, _p2, _r, scale, maxDelta, _w, _h);
-      // 	// the following deep copy could be avoided by swapping _p and _p2
-      // 	Kokkos::deep_copy(_p,_p2);
-      // }
+       applyPreconditioner(_z, _r);
+            
+       double sigmaNew = dotProduct(_z, _r);
+       scaledAdd(_s, _z, _s, sigmaNew/sigma);
+       sigma = sigmaNew;
       
-      if (maxDelta < 1e-5) {
-    	printf("Exiting solver after %d iterations, maximum change is %f\n", iter, maxDelta);
-    	return;
-      }
     } // for iter
 
-    
-    printf("Exceeded budget of %d iterations, maximum change was %f\n", limit, maxDelta);
+     printf("Exceeded budget of %d iterations, maximum error was %f\n", limit, maxError);
               
   } // project
     
@@ -148,6 +208,8 @@ public:
     
   void update(double timestep) {
     buildRhs();
+    buildPressureMatrix(timestep);
+    buildPreconditioner();
     project(600, timestep);
     applyPressure(timestep);
     
