@@ -492,9 +492,9 @@ public:
     double t = a(x,y);
     
     if (x > 0)
-      t -= aPlusX(x-1,y)*precon(x-1,y)*dst(x-1,y);
+      t -= aPlusX(x-1,y  )*precon(x-1,y  )*dst(x-1,y  );
     if (y > 0)
-      t -= aPlusY(x,y-1)*precon(x,y-1)*dst(x,y-1);
+      t -= aPlusY(x  ,y-1)*precon(x  ,y-1)*dst(x  ,y-1);
     
     dst(x,y) = t*precon(x,y);
     
