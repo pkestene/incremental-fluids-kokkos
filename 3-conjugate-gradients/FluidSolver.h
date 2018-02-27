@@ -72,14 +72,14 @@ class FluidSolver {
     
   } // buildPreconditionner
 
- /* Apply preconditioner to vector `a' and store it in `dst' */
+  /* Apply preconditioner to vector `a' and store it in `dst' */
   void applyPreconditioner(Array2d dst, Array2d a) {
 
     // step 1
-    ApplyPreconditionerFunctor(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1);
+    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1);
     
     // step 2
-    ApplyPreconditionerFunctor(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2);
+    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2);
     
   } // applyPreconditioner
 
@@ -88,7 +88,7 @@ class FluidSolver {
     double result = 0.0;
 
     DotProductFunctor::apply(a,b,result);
-    printf("KK %f ",result);
+    
     return result;
     
   } // dotProduct
@@ -153,7 +153,7 @@ class FluidSolver {
        }
 
        applyPreconditioner(_z, _r);
-            
+
        double sigmaNew = dotProduct(_z, _r);
        scaledAdd(_s, _z, _s, sigmaNew/sigma);
        sigma = sigmaNew;
