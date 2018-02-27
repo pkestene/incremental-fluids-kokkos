@@ -62,7 +62,8 @@ class FluidSolver {
       maxDelta = 0.0;
 
       if (iteration_type == ITER_GAUSS_SEIDEL) {
-	ProjectFunctor_GaussSeidel::apply(_p, _r, scale, maxDelta, _w, _h);
+        ProjectFunctor_GaussSeidel::apply(_p, _r, scale, maxDelta, _w, _h, ProjectFunctor_GaussSeidel::RED);
+        ProjectFunctor_GaussSeidel::apply(_p, _r, scale, maxDelta, _w, _h, ProjectFunctor_GaussSeidel::BLACK);
       } else {
 	ProjectFunctor_Jacobi::apply(_p, _p2, _r, scale, maxDelta, _w, _h);
 	// the following deep copy could be avoided by swapping _p and _p2
