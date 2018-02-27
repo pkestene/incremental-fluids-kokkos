@@ -985,12 +985,12 @@ public:
 #endif // __CUDA_ARCH__
   } // init
 
-  // this is were "action" / reduction takes place
   KOKKOS_INLINE_FUNCTION
   void do_red_black(int &x, int &y,
-		    double &diag, double &offDiag,
 		    double &maxDelta) const
   {
+    
+    double diag = 0.0, offDiag = 0.0;
 
     /* Here we build the matrix implicitly as the five-point
      * stencil. Grid borders are assumed to be solid, i.e.
@@ -1025,17 +1025,15 @@ public:
   KOKKOS_INLINE_FUNCTION
   void operator() (const int& index, double& maxDelta) const
   {
-
+    
     int x, y;
     index2coord(index,x,y,_w,_h);
-
-    double diag = 0.0, offDiag = 0.0;
 
     if (redblack_type == RED) { // x and y have same parity
 
       if ( ((x&1) and (y&1)) || (!(x&1) and !(y&1)) ) {
 
-	do_red_black(x,y,diag, offDiag, maxDelta);
+	do_red_black(x,y, maxDelta);
 
       }
       
@@ -1043,7 +1041,7 @@ public:
 
       if ( (!(x&1) and (y&1)) || ((x&1) and !(y&1)) ) {
 
-	do_red_black(x,y,diag, offDiag, maxDelta);
+	do_red_black(x,y, maxDelta);
 
       }
       
