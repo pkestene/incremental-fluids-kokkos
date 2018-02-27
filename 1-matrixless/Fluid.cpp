@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
     char path[256];
     sprintf(path, "Frame%05d.png", iterations++);
     lodepng_encode32_file(path, image, sizeX, sizeY);
-    }
+  }
 
   Kokkos::finalize();
 
