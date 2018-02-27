@@ -941,25 +941,33 @@ class ProjectFunctor_GaussSeidel
 
 public:
 
+  enum RedBlack_t {
+    RED,
+    BLACK
+  };
+  
   /**
    * \param[in,out] p is the pressure (_w  , _h  )
    * \param[in]     r is the RHS      (_w  , _h  )
    */
-  ProjectFunctor_GaussSeidel(Array2d p, Array2d r, double scale, int w, int h) :
+  ProjectFunctor_GaussSeidel(Array2d p, Array2d r, double scale, int w, int h,
+			     RedBlack_t redblack_type) :
     _p(p),
     _r(r),
     _scale(scale),
     _w(w),
-    _h(h)
+    _h(h),
+    redblack_type(redblack_type)
   {};
 
   // static method which does it all: create and execute functor
   static void apply(Array2d p, Array2d r, double scale,
 		    double& maxDelta,
-		    int w, int h)
+		    int w, int h,
+		    RedBlack_t redblack_type)
   {
     const int size = w*h;
-    ProjectFunctor_GaussSeidel functor(p, r, scale, w, h);
+    ProjectFunctor_GaussSeidel functor(p, r, scale, w, h, redblack_type);
     Kokkos::parallel_reduce(size, functor, maxDelta);
   }
 
@@ -979,14 +987,11 @@ public:
 
   // this is were "action" / reduction takes place
   KOKKOS_INLINE_FUNCTION
-  void operator() (const int& index, double& maxDelta) const
+  void do_red_black(int &x, int &y,
+		    double &diag, double &offDiag,
+		    double &maxDelta) const
   {
-    
-    int x, y;
-    index2coord(index,x,y,_w,_h);
 
-    double diag = 0.0, offDiag = 0.0;
-    
     /* Here we build the matrix implicitly as the five-point
      * stencil. Grid borders are assumed to be solid, i.e.
      * there is no fluid outside the simulation domain.
@@ -1007,13 +1012,43 @@ public:
       diag    += _scale;
       offDiag -= _scale*_p(x    , y + 1);
     }
-        
+
     double newP = ( _r(x,y) - offDiag ) / diag;
-
     maxDelta = fmax(maxDelta, fabs(_p(x,y) - newP));
-
+    
     _p(x,y) = newP;
+    
+  } // compute_diag_offdiag
+  
+  
+  // this is were "action" / reduction takes place
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index, double& maxDelta) const
+  {
 
+    int x, y;
+    index2coord(index,x,y,_w,_h);
+
+    double diag = 0.0, offDiag = 0.0;
+
+    if (redblack_type == RED) { // x and y have same parity
+
+      if ( ((x&1) and (y&1)) || (!(x&1) and !(y&1)) ) {
+
+	do_red_black(x,y,diag, offDiag, maxDelta);
+
+      }
+      
+    } else if (redblack_type == BLACK) { // x and y have different parity
+
+      if ( (!(x&1) and (y&1)) || ((x&1) and !(y&1)) ) {
+
+	do_red_black(x,y,diag, offDiag, maxDelta);
+
+      }
+      
+    }
+    
   } // operator()
   
   // "Join" intermediate results from different threads.
@@ -1033,6 +1068,7 @@ public:
   Array2d _p, _r;
   double  _scale;
   int     _w,_h;
+  RedBlack_t redblack_type;
   
 }; // class ProjectFunctor_GaussSeidel
 

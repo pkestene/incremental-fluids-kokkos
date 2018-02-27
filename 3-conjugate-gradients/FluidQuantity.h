@@ -32,7 +32,6 @@ double cubicPulse(double x) {
   return 1.0 - x*x*(3.0 - 2.0*x);
 }
 
-
 /* This is the class representing fluid quantities such as density and velocity
  * on the MAC grid. It saves attributes such as offset from the top left grid
  * cell, grid width and height as well as cell size.
