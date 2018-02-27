@@ -447,20 +447,28 @@ class ApplyPreconditionerFunctor
 
 public:
 
+  enum RedBlack_t {
+    RED,
+    BLACK
+  };
+
   /**
    * \param[out] dst
    * \param[in]  a
-   * \param[in] precon
-   * \param[in] aPlusX
-   * \param[in] aPlusY
-   * \param[in] w width
-   * \param[in] h height
-   * \param[in] step number (can only be 1 or 2)
+   * \param[in]  precon
+   * \param[in]  aPlusX
+   * \param[in]  aPlusY
+   * \param[in]  w width
+   * \param[in]  h height
+   * \param[in]  step number (can only be 1 or 2)
+   * \param[in]  useA (should we use array a or not, it depends on the step)
    */
   ApplyPreconditionerFunctor(Array2d dst, Array2d a,
 			     Array2d precon,
 			     Array2d aPlusX, Array2d aPlusY,
-			     int w, int h, int stepId) :
+			     int w, int h, int stepId,
+			     RedBlack_t redblack_type,
+			     bool useA) :
     dst(dst),
     a(a),
     precon(precon),
@@ -468,28 +476,30 @@ public:
     aPlusY(aPlusY),    
     w(w),
     h(h),
-    stepId(stepId)
+    stepId(stepId),
+    redblack_type(redblack_type),
+    useA(useA)
   {};
 
   // static method which does it all: create and execute functor
   static void apply(Array2d dst, Array2d a,
 		    Array2d precon,
 		    Array2d aPlusX, Array2d aPlusY,
-		    int w, int h, int stepId)
+		    int w, int h, int stepId,
+		    RedBlack_t redblack_type,
+		    bool useA)
   {
     const int size = w*h;
-    ApplyPreconditionerFunctor functor(dst,a,precon,aPlusX,aPlusY,w,h,stepId);
+    ApplyPreconditionerFunctor functor(dst,a,precon,aPlusX,aPlusY,w,h,stepId,
+				       redblack_type,useA);
     Kokkos::parallel_for(size, functor);
   }
 
   KOKKOS_INLINE_FUNCTION
-  void step1 (const int& index) const
+  void step1 (int& x, int& y) const
   {
 
-    int x, y;
-    index2coord(index,x,y,w,h);
-
-    double t = a(x,y);
+    double t = a(x,y);// : dst(x,y);
     
     if (x > 0)
       t -= aPlusX(x-1,y  )*precon(x-1,y  )*dst(x-1,y  );
@@ -501,11 +511,8 @@ public:
   } // step1
   
   KOKKOS_INLINE_FUNCTION
-  void step2 (const int& index) const
+  void step2 (int& x, int& y) const
   {
-
-    int x, y;
-    index2coord(index,x,y,w,h);
 
     // reverse order of sweeping
     x = w-x;
@@ -526,15 +533,38 @@ public:
   void operator() (const int& index) const
   {
 
+    int x, y;
+    index2coord(index,x,y,w,h);
+
     // this functor is supposed to be launched with _w*_h iterations
     // it has been slightly modified (compared to serial version)
     // to avoid data race
 
-    if (stepId == 1)
-      step1(index);
+    if (redblack_type == RED) { // x and y have same parity
 
-    if (stepId == 2)
-      step2(index);
+      if ( ((x&1) and (y&1)) || (!(x&1) and !(y&1)) ) {
+
+	if (stepId == 1)
+	  step1(x,y);
+	
+	if (stepId == 2)
+	  step2(x,y);
+	
+      }
+
+    } else if (redblack_type == BLACK) { // x and y have different parity
+      
+      if ( (!(x&1) and (y&1)) || ((x&1) and !(y&1)) ) {
+
+	if (stepId == 1)
+	  step1(x,y);
+	
+	if (stepId == 2)
+	  step2(x,y);	
+	
+      }
+
+    }
     
   } // operator()
 
@@ -543,6 +573,8 @@ public:
   Array2d aPlusX, aPlusY;
   int w, h;
   int stepId;
+  RedBlack_t redblack_type;
+  bool useA;
   
 }; // class ApplyPreconditionerFunctor
 

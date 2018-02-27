@@ -58,7 +58,7 @@ class FluidSolver {
     reset_view(_aDiag);
     
     // buildPressureMatrix
-    // serail version refactored to avoid data-race
+    // serial version refactored to avoid data-race
     BuildPressureMatrixFunctor::apply(_aDiag, _aPlusX, _aPlusY, scale, _w, _h);
 
   } // buildPressureMatrix
@@ -75,11 +75,15 @@ class FluidSolver {
   /* Apply preconditioner to vector `a' and store it in `dst' */
   void applyPreconditioner(Array2d dst, Array2d a) {
 
+    //Kokkos::deep_copy(dst,a);
+    
     // step 1
-    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1);
+    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1,ApplyPreconditionerFunctor::RED,true);
+    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1,ApplyPreconditionerFunctor::BLACK,true);
     
     // step 2
-    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2);
+    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2,ApplyPreconditionerFunctor::RED,false);
+    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2,ApplyPreconditionerFunctor::BLACK,false);
     
   } // applyPreconditioner
 
@@ -111,7 +115,7 @@ class FluidSolver {
 	dst(x,y) = a(x,y) + b(x,y)*s;
       });
     
-  } // scaleAdd
+  } // scaledAdd
 
   /* Returns maximum absolute value in vector `a' */
   double infinityNorm(Array2d a) {
@@ -139,16 +143,16 @@ class FluidSolver {
        return;
      
      double sigma = dotProduct(_z, _r);
-     
      for (int iter = 0; iter < limit; iter++) {
        matrixVectorProduct(_z, _s);
+
        double alpha = sigma/dotProduct(_z, _s);
        scaledAdd(_p, _p, _s, alpha);
        scaledAdd(_r, _r, _z, -alpha);
        
        maxError = infinityNorm(_r);
        if (maxError < 1e-5) {
-	 printf("Exiting solver after %d iterations, maximum error is %f\n", iter, maxError);
+	 printf("Exiting solver after %d iterations, maximum error is %.15f\n", iter, maxError);
 	 return;
        }
 
@@ -160,7 +164,7 @@ class FluidSolver {
       
     } // for iter
 
-     printf("Exceeded budget of %d iterations, maximum error was %f\n", limit, maxError);
+     printf("Exceeded budget of %d iterations, maximum error was %.15f\n", limit, maxError);
               
   } // project
     
