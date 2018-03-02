@@ -503,15 +503,15 @@ public:
 
     if (redblack_type == RED) { // x and y have same parity
 
-      if ( ((x&1) and (y&1)) || (!(x&1) and !(y&1)) ) {
-
+      if ( !((x+y)&1) ) {
+	
 	do_red_black(x,y, maxDelta);
 
       }
       
     } else if (redblack_type == BLACK) { // x and y have different parity
 
-      if ( (!(x&1) and (y&1)) || ((x&1) and !(y&1)) ) {
+      if ( ((x+y)&1) ) {
 
 	do_red_black(x,y, maxDelta);
 
