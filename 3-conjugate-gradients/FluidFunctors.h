@@ -359,6 +359,9 @@ public:
  *
  * Builds the modified incomplete Cholesky preconditioner.
  *
+ * Should only be called once, at the beginning of the simulation,
+ * not every time step.
+ *
  */
 class BuildPreconditionerFunctor
 {
@@ -440,18 +443,20 @@ public:
 /**
  * Apply preconditioner to vector `a' and store it in `dst' 
  *
- * preditionning is devided in two steps.
+ * preditionning is divided in two steps.
+ *
+ * The parallelization is the naive, diagonal by diagonal, with explicit 
+ * synchronization in between. Very inefficient on GPU (one kernel launch
+ * per diagonal).
+ *
+ * A real smart algorithm is hard to design here.
+ *
  */
 class ApplyPreconditionerFunctor
 {
 
 public:
-
-  enum RedBlack_t {
-    RED,
-    BLACK
-  };
-
+  
   /**
    * \param[out] dst
    * \param[in]  a
@@ -461,14 +466,11 @@ public:
    * \param[in]  w width
    * \param[in]  h height
    * \param[in]  step number (can only be 1 or 2)
-   * \param[in]  useA (should we use array a or not, it depends on the step)
    */
   ApplyPreconditionerFunctor(Array2d dst, Array2d a,
 			     Array2d precon,
 			     Array2d aPlusX, Array2d aPlusY,
-			     int w, int h, int stepId,
-			     RedBlack_t redblack_type,
-			     bool useA) :
+			     int w, int h, int stepId) :
     dst(dst),
     a(a),
     precon(precon),
@@ -476,22 +478,18 @@ public:
     aPlusY(aPlusY),    
     w(w),
     h(h),
-    stepId(stepId),
-    redblack_type(redblack_type),
-    useA(useA)
+    stepId(stepId)
   {};
 
   // static method which does it all: create and execute functor
   static void apply(Array2d dst, Array2d a,
 		    Array2d precon,
 		    Array2d aPlusX, Array2d aPlusY,
-		    int w, int h, int stepId,
-		    RedBlack_t redblack_type,
-		    bool useA)
+		    int w, int h, int stepId)
   {
-    const int size = w*h;
-    ApplyPreconditionerFunctor functor(dst,a,precon,aPlusX,aPlusY,w,h,stepId,
-				       redblack_type,useA);
+    // max size of a diagonal is min(w,h)
+    const int size = w < h ? w : h;
+    ApplyPreconditionerFunctor functor(dst,a,precon,aPlusX,aPlusY,w,h,stepId);
     Kokkos::parallel_for(size, functor);
   }
 
@@ -499,7 +497,9 @@ public:
   void step1 (int& x, int& y) const
   {
 
-    double t = a(x,y);// : dst(x,y);
+    // forward sweep
+    
+    double t = a(x,y);
     
     if (x > 0)
       t -= aPlusX(x-1,y  )*precon(x-1,y  )*dst(x-1,y  );
@@ -536,35 +536,12 @@ public:
     int x, y;
     index2coord(index,x,y,w,h);
 
-    // this functor is supposed to be launched with _w*_h iterations
-    // it has been slightly modified (compared to serial version)
-    // to avoid data race
-
-    if (redblack_type == RED) { // x and y have same parity
-
-      if ( ((x&1) and (y&1)) || (!(x&1) and !(y&1)) ) {
-
-	if (stepId == 1)
-	  step1(x,y);
-	
-	if (stepId == 2)
-	  step2(x,y);
-	
-      }
-
-    } else if (redblack_type == BLACK) { // x and y have different parity
-      
-      if ( (!(x&1) and (y&1)) || ((x&1) and !(y&1)) ) {
-
-	if (stepId == 1)
-	  step1(x,y);
-	
-	if (stepId == 2)
-	  step2(x,y);	
-	
-      }
-
-    }
+    if (stepId == 1)
+      step1(x,y);
+    
+    if (stepId == 2)
+      step2(x,y);
+    
     
   } // operator()
 
@@ -573,8 +550,6 @@ public:
   Array2d aPlusX, aPlusY;
   int w, h;
   int stepId;
-  RedBlack_t redblack_type;
-  bool useA;
   
 }; // class ApplyPreconditionerFunctor
 

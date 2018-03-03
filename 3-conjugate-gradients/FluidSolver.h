@@ -50,6 +50,8 @@ class FluidSolver {
 
   /* Builds the pressure matrix. Since the matrix is very sparse and
    * symmetric, it allows for memory friendly storage.
+   *
+   * Called only once at the begin of simulation.
    */
   void buildPressureMatrix(double timestep) {
     double scale = timestep/(_density*_hx*_hx);
@@ -74,16 +76,12 @@ class FluidSolver {
 
   /* Apply preconditioner to vector `a' and store it in `dst' */
   void applyPreconditioner(Array2d dst, Array2d a) {
-
-    //Kokkos::deep_copy(dst,a);
     
     // step 1
-    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1,ApplyPreconditionerFunctor::RED,true);
-    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1,ApplyPreconditionerFunctor::BLACK,true);
+    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1);
     
     // step 2
-    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2,ApplyPreconditionerFunctor::RED,false);
-    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2,ApplyPreconditionerFunctor::BLACK,false);
+    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2);
     
   } // applyPreconditioner
 
@@ -209,11 +207,24 @@ public:
     delete _u;
     delete _v;
   }
+
+  /**
+   * called once before entering the time loop
+   */
+  void init(double timestep) {
+
+    // pressure matrix never changed, so build it here
+    // computes aDiag, aPlusX, aPlusY
+    buildPressureMatrix(timestep);
+
+    // computes precon
+    buildPreconditioner();
+
     
+  }
+  
   void update(double timestep) {
     buildRhs();
-    buildPressureMatrix(timestep);
-    buildPreconditioner();
     project(600, timestep);
     applyPressure(timestep);
     

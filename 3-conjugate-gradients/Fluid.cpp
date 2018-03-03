@@ -74,7 +74,11 @@ int main(int argc, char* argv[])
 
   double time = 0.0;
   int iterations = 0;
-    
+
+  // init
+  solver->init(timestep);
+
+  
   while (time < 4.0) {
     
     /* Use four substeps per iteration */
