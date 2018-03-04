@@ -38,6 +38,15 @@ class FluidSolver {
   Array2d _aDiag;  /* Matrix diagonal */
   Array2d _aPlusX; /* Matrix off-diagonals */
   Array2d _aPlusY;
+
+  // host arrays used to apply preconditioner on host
+  // temp array
+  Array2dHost _aDiag_host;
+  Array2dHost _aPlusX_host;
+  Array2dHost _aPlusY_host;
+  Array2dHost _precon_host;
+  Array2dHost _a_host;
+  Array2dHost _dst_host;
   
   /* Builds the pressure right hand side as the negative divergence */
   void buildRhs() {
@@ -63,25 +72,86 @@ class FluidSolver {
     // serial version refactored to avoid data-race
     BuildPressureMatrixFunctor::apply(_aDiag, _aPlusX, _aPlusY, scale, _w, _h);
 
+    // copy on host
+    Kokkos::deep_copy(_aDiag_host, _aDiag);
+    Kokkos::deep_copy(_aPlusX_host, _aPlusX);
+    Kokkos::deep_copy(_aPlusY_host, _aPlusY);
+    
   } // buildPressureMatrix
 
   /* Builds the modified incomplete Cholesky preconditioner */
-  void buildPreconditioner() {
+  void buildPreconditioner(double timestep) {
     const double tau = 0.97;
     const double sigma = 0.25;
+    
+    // init precon_host
+    for (int y = 0; y < _h; y++) {
+      for (int x = 0; x < _w; x++) {
+	double e = _aDiag_host(x,y);
+	
+	if (x > 0) {
+	  double px = _aPlusX_host(x-1,y)*_precon_host(x-1,y);
+	  double py = _aPlusY_host(x-1,y)*_precon_host(x-1,y);
+	  e = e - (px*px + tau*px*py);
+	}
+	if (y > 0) {
+	  double px = _aPlusX_host(x,y-1)*_precon_host(x,y-1);
+	  double py = _aPlusY_host(x,y-1)*_precon_host(x,y-1);
+	  e = e - (py*py + tau*px*py);
+	}
+	
+	if (e < sigma*_aDiag_host(x,y))
+	  e = _aDiag_host(x,y);
+	
+	_precon_host(x,y) = 1.0/sqrt(e);
+      }
+    }
 
-    BuildPreconditionerFunctor::apply(_aDiag, _aPlusX, _aPlusY, _precon, _w, _h, tau, sigma);
+    // copy precon_host to device
+    Kokkos::deep_copy(_precon,_precon_host);
+    Kokkos::fence();
     
   } // buildPreconditionner
 
   /* Apply preconditioner to vector `a' and store it in `dst' */
   void applyPreconditioner(Array2d dst, Array2d a) {
+
+    // copy a to host
+    Kokkos::deep_copy(_a_host, a);
+    
+    // apply preconditionner on host
     
     // step 1
-    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,1);
+    for (int y = 0; y < _h; y++) {
+      for (int x = 0; x < _w; x++) {
+	double t = _a_host(x,y);
+	
+	if (x > 0)
+	  t -= _aPlusX_host(x-1,y)*_precon_host(x-1,y)*_dst_host(x-1,y);
+	if (y > 0)
+	  t -= _aPlusY_host(x,y-1)*_precon_host(x,y-1)*_dst_host(x,y-1);
+	
+	_dst_host(x,y) = t*_precon_host(x,y);
+      }
+    }
     
     // step 2
-    ApplyPreconditionerFunctor::apply(dst,a,_precon,_aPlusX,_aPlusY,_w,_h,2);
+    for (int y = _h - 1; y >= 0; y--) {
+      for (int x = _w - 1; x >= 0; x--) {
+        
+	double t = _dst_host(x,y);
+	
+	if (x < _w - 1)
+	  t -= _aPlusX_host(x,y)*_precon_host(x,y)*_dst_host(x+1,y);
+	if (y < _h - 1)
+	  t -= _aPlusY_host(x,y)*_precon_host(x,y)*_dst_host(x,y+1);
+	
+	_dst_host(x,y) = t*_precon_host(x,y);
+      }
+    }
+
+    // copy back results on device 
+    Kokkos::deep_copy(dst,_dst_host);
     
   } // applyPreconditioner
 
@@ -199,7 +269,15 @@ public:
     _aPlusX = Array2d("off_diag_x",_w,_h);
     _aPlusY = Array2d("off_diag_y",_w,_h);
     
+    // temp array
+    _aDiag_host  = Array2dHost("aDiag_host",_w,_h);
+    _aPlusX_host = Array2dHost("aPlusX_host",_w,_h);
+    _aPlusY_host = Array2dHost("aPlusY_host",_w,_h);
+    _precon_host = Array2dHost("precon_host",_w,_h);
 
+    _a_host = Array2dHost("a_host",_w,_h);
+    _dst_host = Array2dHost("dst_host",_w,_h);
+    
   }
     
   ~FluidSolver() {
@@ -218,16 +296,21 @@ public:
     buildPressureMatrix(timestep);
 
     // computes precon
-    buildPreconditioner();
-
+    buildPreconditioner(timestep);
     
   }
   
   void update(double timestep) {
+    // compute scale divergence of velocity field
     buildRhs();
+
+    // compute pressure
     project(600, timestep);
+
+    // update velocity field with pressure gradient
     applyPressure(timestep);
-    
+
+    // update velocity field with advection
     AdvectionFunctor::apply(*_d,*_u,*_v,timestep);
     AdvectionFunctor::apply(*_u,*_u,*_v,timestep);
     AdvectionFunctor::apply(*_v,*_u,*_v,timestep);
