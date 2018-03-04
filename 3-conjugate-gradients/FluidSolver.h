@@ -5,6 +5,18 @@
 #include "FluidQuantity.h"
 #include "FluidFunctors.h"
 
+/* Computes `dst' = `a' + `b'*`s' */
+void scaledAdd(Array2d dst, Array2d a, Array2d b, double s) {
+  
+  const int size = dst.dimension_0()*dst.dimension_1();
+  Kokkos::parallel_for(size, KOKKOS_LAMBDA(const int index) {
+      int x, y;
+      index2coord(index,x,y,dst.dimension_0(),dst.dimension_1());
+      dst(x,y) = a(x,y) + b(x,y)*s;
+    });
+  
+} // scaledAdd
+
 // =========================================================================
 // =========================================================================
 /* Fluid solver class. Sets up the fluid quantities, forces incompressibility
@@ -173,17 +185,6 @@ class FluidSolver {
     
   }
 
-  /* Computes `dst' = `a' + `b'*`s' */
-  void scaledAdd(Array2d dst, Array2d a, Array2d b, double s) {
-
-    const int size = dst.dimension_0()*dst.dimension_1();
-    Kokkos::parallel_for(size, KOKKOS_LAMBDA(const int index) {
-	int x, y;
-	index2coord(index,x,y,_w,_h);
-	dst(x,y) = a(x,y) + b(x,y)*s;
-      });
-    
-  } // scaledAdd
 
   /* Returns maximum absolute value in vector `a' */
   double infinityNorm(Array2d a) {
