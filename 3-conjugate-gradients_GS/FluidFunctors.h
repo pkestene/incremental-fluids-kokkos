@@ -358,64 +358,112 @@ public:
 /**
  * Apply preconditioner to vector `a' and store it in `dst' 
  *
- * preditionning is divided in two steps.
+ * Just use a SOR (Successive Over Relaxation) Gauss-Seidel based
+ * preconditioner.
  *
- * The parallelization is the naive, diagonal by diagonal, with explicit 
- * synchronization in between. Very inefficient on GPU (one kernel launch
- * per diagonal).
- *
- * A real smart algorithm is hard to design here.
+ * https://en.wikipedia.org/wiki/Successive_over-relaxation
  *
  */
 class ApplyPreconditionerFunctor
 {
 
 public:
-  
+
+  enum RedBlack_t {
+    RED = 0,
+    BLACK = 1
+  };
+
   /**
    * \param[out] dst
    * \param[in]  a
-   * \param[in]  precon
    * \param[in]  aPlusX
    * \param[in]  aPlusY
    * \param[in]  w width
    * \param[in]  h height
-   * \param[in]  step number (can only be 1 or 2)
+   * \param[in]  red_black type (can only be RED or BLACK)
    */
-  ApplyPreconditionerFunctor(Array2d dst, Array2d a,
-			     Array2d precon,
-			     Array2d aPlusX, Array2d aPlusY,
-			     int w, int h, int stepId) :
+  ApplyPreconditionerFunctor(Array2d dst,
+			     Array2d a,
+			     int w,
+			     int h,
+			     double omega,
+			     RedBlack_t red_black) :
     dst(dst),
     a(a),
-    precon(precon),
-    aPlusX(aPlusX),
-    aPlusY(aPlusY),    
     w(w),
     h(h),
-    stepId(stepId)
+    omega(omega),
+    red_black(red_black),
+    scale(1.0)
   {};
 
   // static method which does it all: create and execute functor
   static void apply(Array2d dst, Array2d a,
-		    Array2d precon,
-		    Array2d aPlusX, Array2d aPlusY,
-		    int w, int h, int stepId)
+                    int w, int h,
+		    double omega,
+		    int nbIter)
   {
     // max size of a diagonal is min(w,h)
-    const int size = w < h ? w : h;
-    ApplyPreconditionerFunctor functor(dst,a,precon,aPlusX,aPlusY,w,h,stepId);
-    Kokkos::parallel_for(size, functor);
+    const int size = w*h;
+    for (int iter=0; iter<nbIter; ++iter) {
+      {
+	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,RED);
+	Kokkos::parallel_for(size, functor);
+      }
+      {
+	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,BLACK);
+	Kokkos::parallel_for(size, functor);
+      }
+    }
   }
 
-KOKKOS_INLINE_FUNCTION
+  KOKKOS_INLINE_FUNCTION
+  void do_red_black(int &x, int &y) const
+  {
+    
+    double diag = 0.0, offDiag = 0.0;
+
+    /* Here we build the matrix implicitly as the five-point
+     * stencil. Grid borders are assumed to be solid, i.e.
+     * there is no fluid outside the simulation domain.
+     */
+    if (x > 0) {
+      diag    += scale;
+      offDiag -= scale*dst(x - 1, y    );
+    }
+    if (y > 0) {
+      diag    += scale;
+      offDiag -= scale*dst(x    , y - 1);
+    }
+    if (x < w - 1) {
+      diag    += scale;
+      offDiag -= scale*dst(x + 1, y    );
+    }
+    if (y < h - 1) {
+      diag    += scale;
+      offDiag -= scale*dst(x    , y + 1);
+    }
+
+    // here is the Successive over-relaxation
+    double new_val = (1-omega)*dst(x,y) + omega * ( a(x,y) - offDiag ) / diag;
+    
+    dst(x,y) = new_val;
+    
+  } // do_red_black
+
+  KOKKOS_INLINE_FUNCTION
   void operator() (const int& index) const
   {
 
     int x, y;
     index2coord(index,x,y,w,h);
 
-    // TODO
+    // if red_black == RED then compute only if x and y have different parity
+    // if red_black == BLACK then compute only if x and y have same parity
+    if ( !((x+y+red_black)&1) ) {
+      do_red_black(x,y);
+    }
     
   } // operator()
 
@@ -423,7 +471,9 @@ KOKKOS_INLINE_FUNCTION
   Array2d precon;
   Array2d aPlusX, aPlusY;
   int w, h;
-  int stepId;
+  double omega;
+  RedBlack_t red_black;
+  double scale;
   
 }; // class ApplyPreconditionerFunctor
 
@@ -823,8 +873,8 @@ class ProjectFunctor_GaussSeidel
 public:
 
   enum RedBlack_t {
-    RED,
-    BLACK
+    RED = 0,
+    BLACK = 1
   };
   
   /**
@@ -899,7 +949,7 @@ public:
     
     _p(x,y) = newP;
     
-  } // compute_diag_offdiag
+  } // do_red_black
   
   
   // this is were "action" / reduction takes place

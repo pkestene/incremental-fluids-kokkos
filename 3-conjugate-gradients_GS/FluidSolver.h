@@ -80,7 +80,10 @@ class FluidSolver {
   /* Apply preconditioner to vector `a' and store it in `dst' */
   void applyPreconditioner(Array2d dst, Array2d a) {
 
-    // TODO
+    double omega = 1.5;
+    int nbIter = 10;
+    reset_view(dst);
+    ApplyPreconditionerFunctor::apply(dst, a, _w, _h, omega, nbIter);
     
   } // applyPreconditioner
 
@@ -181,8 +184,7 @@ public:
 
     _z = Array2d("aux_vector",_w,_h);
     _s = Array2d("search_vector",_w,_h);
-    _precon = Array2d("preconditioner",_w,_h);
-    
+
     _aDiag = Array2d("matrix_diagonal",_w,_h);
     _aPlusX = Array2d("off_diag_x",_w,_h);
     _aPlusY = Array2d("off_diag_y",_w,_h);
