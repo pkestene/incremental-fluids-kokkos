@@ -407,6 +407,8 @@ public:
     // max size of a diagonal is min(w,h)
     const int size = w*h;
     for (int iter=0; iter<nbIter; ++iter) {
+
+      // forward
       {
 	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,RED);
 	Kokkos::parallel_for(size, functor);
@@ -415,6 +417,17 @@ public:
 	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,BLACK);
 	Kokkos::parallel_for(size, functor);
       }
+
+      // backward (inverse colors)
+      {
+	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,BLACK);
+	Kokkos::parallel_for(size, functor);
+      }
+      {
+	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,RED);
+	Kokkos::parallel_for(size, functor);
+      }
+
     }
   }
 
