@@ -39,6 +39,14 @@ typedef Array2d::HostMirror              Array2dHost;
 typedef Kokkos::View<double***, Device>  Array3d;
 typedef Array3d::HostMirror              Array3dHost;
 
+// 2d array of uint8_t
+typedef Kokkos::View<uint8_t**, Device>  Array2d_uchar;
+typedef Array2d_uchar::HostMirror        Array2dHost_uchar;
+
+// 3d array of uint8_t
+typedef Kokkos::View<uint8_t***, Device>  Array3d_uchar;
+typedef Array3d_uchar::HostMirror        Array3dHost_uchar;
+
 /**
  * Retrieve cartesian coordinate from index, using memory layout information.
  *

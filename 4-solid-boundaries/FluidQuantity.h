@@ -15,6 +15,20 @@ int imax(int i, int j) {
   return i<j ? j : i;
 } // imax
 
+/* See http://stackoverflow.com/questions/1903954/is-there-a-standard-sign-function-signum-sgn-in-c-c */
+template <typename T>
+KOKKOS_INLINE_FUNCTION
+int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
+/* Non-zero sgn */
+template <typename T>
+KOKKOS_INLINE_FUNCTION
+int nsgn(T val) {
+    return (val < T(0) ? -1 : 1);
+}
+
 /* Length of vector (x, y) */
 KOKKOS_INLINE_FUNCTION
 double length(double x, double y) {
@@ -31,6 +45,20 @@ double cubicPulse(double x) {
   x = fmin(fabs(x), 1.0);
   return 1.0 - x*x*(3.0 - 2.0*x);
 }
+
+/* Rotates point (x, y) by angle phi */
+KOKKOS_INLINE_FUNCTION
+void rotate(double &x, double &y, double phi) {
+    double tmpX = x, tmpY = y;
+    x =  cos(phi)*tmpX + sin(phi)*tmpY;
+    y = -sin(phi)*tmpX + cos(phi)*tmpY;
+}
+
+/* Enum to differentiate fluid and solid cells */
+enum CellType {
+    CELL_FLUID,
+    CELL_SOLID
+};
 
 /* This is the class representing fluid quantities such as density and velocity
  * on the MAC grid. It saves attributes such as offset from the top left grid
@@ -52,6 +80,19 @@ public:
   Array2d _src;
   Array2d _dst;
   
+  /* Normal of distance field at grid points */
+  Array2d _normalX;
+  Array2d _normalY;
+
+  /* Designates cells as fluid or solid cells (CELL_FLUID or CELL_SOLID) */
+  Array2d_uchar _cell;
+
+  /* Specifies the index of the rigid body closes to a grid cell */
+  Array2d_uchar _body;
+
+  /* Auxiliary array used for extrapolation */
+  Array2d_uchar _mask;
+
   /* Width and height */
   int _w;
   int _h;
@@ -100,7 +141,14 @@ public:
     // kokkos view are initialized to zero
     _src = Array2d("_src",_w,_h);
     _dst = Array2d("_dst",_w,_h);
-    
+
+    _normalX = Array2d("_normalX",_w,_h);
+    _normalY = Array2d("_normalY",_w,_h);
+
+    _cell = Array2d_uchar("_cell",_w,_h);
+    _body = Array2d_uchar("_body",_w,_h);
+    _mask = Array2d_uchar("_mask",_w,_h);
+
   }
   
   ~FluidQuantity() {

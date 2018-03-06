@@ -1,4 +1,4 @@
-set(EXE_NAME 4-solid-boundaries))
+set(EXE_NAME 4-solid-boundaries)
 
 add_executable(${EXE_NAME}
   ${LODEPNG_SRC}
