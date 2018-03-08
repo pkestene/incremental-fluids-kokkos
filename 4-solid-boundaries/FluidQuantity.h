@@ -3,37 +3,12 @@
 
 #include "kokkos_shared.h"
 
-// some utilities
+#include "math_utils.h"
 
-KOKKOS_INLINE_FUNCTION
-int imin(int i, int j) {
-  return i<j ? i : j;
-} // imin
+#include "SolidBody.h"
 
-KOKKOS_INLINE_FUNCTION
-int imax(int i, int j) {
-  return i<j ? j : i;
-} // imax
-
-/* See http://stackoverflow.com/questions/1903954/is-there-a-standard-sign-function-signum-sgn-in-c-c */
-template <typename T>
-KOKKOS_INLINE_FUNCTION
-int sgn(T val) {
-    return (T(0) < val) - (val < T(0));
-}
-
-/* Non-zero sgn */
-template <typename T>
-KOKKOS_INLINE_FUNCTION
-int nsgn(T val) {
-    return (val < T(0) ? -1 : 1);
-}
-
-/* Length of vector (x, y) */
-KOKKOS_INLINE_FUNCTION
-double length(double x, double y) {
-  return sqrt(x*x + y*y);
-}
+// mask type for SolidBody extrapolate computation
+using MaskMap2d = Kokkos::UnorderedMap<int, uint8_t, Device>;
 
 /* Cubic pulse function.
  * Returns a value in range [0, 1].
@@ -46,13 +21,6 @@ double cubicPulse(double x) {
   return 1.0 - x*x*(3.0 - 2.0*x);
 }
 
-/* Rotates point (x, y) by angle phi */
-KOKKOS_INLINE_FUNCTION
-void rotate(double &x, double &y, double phi) {
-    double tmpX = x, tmpY = y;
-    x =  cos(phi)*tmpX + sin(phi)*tmpY;
-    y = -sin(phi)*tmpX + cos(phi)*tmpY;
-}
 
 /* Enum to differentiate fluid and solid cells */
 enum CellType {
@@ -92,7 +60,9 @@ public:
 
   /* Auxiliary array used for extrapolation */
   Array2d_uchar _mask;
-
+  
+  MaskMap2d _mask_map;
+  
   /* Width and height */
   int _w;
   int _h;

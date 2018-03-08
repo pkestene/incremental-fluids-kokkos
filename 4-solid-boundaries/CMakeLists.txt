@@ -4,6 +4,7 @@ add_executable(${EXE_NAME}
   ${LODEPNG_SRC}
   kokkos_shared.h
   FluidQuantity.h
+  SolidBody.h
   FluidFunctors.h
   Fluid.cpp)
 target_include_directories(${EXE_NAME}

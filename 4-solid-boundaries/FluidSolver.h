@@ -4,6 +4,7 @@
 #include "kokkos_shared.h"
 #include "FluidQuantity.h"
 #include "FluidFunctors.h"
+#include "SolidBody.h"
 
 /* Computes `dst' = `a' + `b'*`s' */
 void scaledAdd(Array2d dst, Array2d a, Array2d b, double s) {

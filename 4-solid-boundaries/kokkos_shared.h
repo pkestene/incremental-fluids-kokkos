@@ -9,6 +9,8 @@
 
 #include <impl/Kokkos_Error.hpp>
 
+#include <Kokkos_UnorderedMap.hpp>
+
 //#include "shared/real_type.h"
 //#include "shared/utils.h"
 
