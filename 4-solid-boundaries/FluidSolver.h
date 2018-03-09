@@ -126,7 +126,7 @@ class FluidSolver {
    * The solver will run as long as it takes to get the relative error below
    * a threshold, but will never exceed `limit' iterations
    */
-   void project(int limit, double timestep) {
+   void project(int limit) {
 
      reset_view(_p); /* Initial guess of zeroes */
      applyPreconditioner(_z, _r);
@@ -239,7 +239,7 @@ public:
     buildRhs();
 
     // compute pressure
-    project(600, timestep);
+    project(2000);
 
     // update velocity field with pressure gradient
     applyPressure(timestep);
