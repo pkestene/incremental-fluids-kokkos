@@ -913,6 +913,122 @@ public:
 // ==================================================================
 // ==================================================================
 /**
+ * FillSolidFields functor.
+ *
+ * For a given fluid quantity, fill body and cell arrays.
+ *
+ *    body contains the index of the closest body to a given x,y location
+ *    cell indicates if location x,y is FLUID or SOLID
+ *
+ */
+class FillSolidFieldsFunctor {
+
+public:
+
+  /**
+   * \param[in,out]     cell is array of cell type (_w,_h)
+   * \param[in,out]     body is array of body Id per cell (_w,_h)
+   * \param[in,out]     normalX
+   * \param[in,out]     normalY
+   * \param[in]         bodies
+   */
+  FillSolidFieldsFunctor(Array2d_uchar cell,
+			 Array2d_uchar body,
+			 Array2d       normalX,
+			 Array2d       normalY,
+			 SolidBodyList bodies,
+			 int w,
+			 int h,
+			 double ox,
+			 double oy,
+			 double hx) :
+    _cell(cell),
+    _body(body),
+    _normalX(normalX),
+    _normalY(normalY),
+    _bodies(bodies),
+    _w(w),
+    _h(h),
+    _ox(ox),
+    _oy(oy),
+    _hx(hx)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d_uchar cell,
+		    Array2d_uchar body,
+		    Array2d       normalX,
+		    Array2d       normalY,
+		    SolidBodyList bodies,
+		    int w,
+		    int h,
+		    double ox,
+		    double oy,
+		    double hx)
+  {
+    const int size = w*h;
+    FillSolidFieldsFunctor functor(cell, body, normalX, normalY, bodies, w, h, ox, oy, hx);
+    Kokkos::parallel_for(size, functor);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    // this functor is supposed to be launched with _w*_h iterations
+    // it has been slightly modified (compared to serial version)
+    // to avoid data race
+    
+    int ix, iy;
+    index2coord(index,ix,iy,_w,_h);
+
+    double x = (ix + _ox)*_hx;
+    double y = (iy + _oy)*_hx;
+    
+    // Search closest solid
+    _body(ix,iy) = 0;
+    double d = _bodies(0).distance(x, y);
+    for (unsigned i = 1; i < _bodies.size(); i++) {
+      double id = _bodies(i).distance(x, y);
+      if (id < d) {
+	_body(ix,iy) = i;
+	d = id;
+      }
+    }
+    
+    /* 
+     * If distance to closest solid is negative, this cell must be
+     * inside it
+     */
+    if (d < 0.0)
+      _cell(ix,iy) = CELL_SOLID;
+    else
+      _cell(ix,iy) = CELL_FLUID;
+
+    /*
+     * compute _normalX, _normalY
+     */
+    _bodies(_body(ix,iy)).distanceNormal(_normalX(ix,iy), _normalY(ix,iy), x, y);
+    
+  } // end operator()
+  
+  Array2d_uchar _cell;
+  Array2d_uchar _body;
+  SolidBodyList _bodies;
+  Array2d       _normalX;
+  Array2d       _normalY;
+  int _w;
+  int _h;
+  double _ox;
+  double _oy;
+  double _hx;
+
+}; // class SetBoundaryConditionFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
  * MaxVelocity functor.
  *
  *  Returns the maximum allowed timestep. Note that the actual timestep

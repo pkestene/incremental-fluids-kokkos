@@ -229,9 +229,9 @@ public:
   void update(double timestep) {
 
     // fill solidFields - TODO
-    //FillSolidFields(_bodies);
-    //FillSolidFields(_bodies);
-    //FillSolidFields(_bodies);
+    fillSolidFields(_d);
+    fillSolidFields(_u);
+    fillSolidFields(_v);
     
     setBoundaryCondition();
     
@@ -269,26 +269,22 @@ public:
 
   }
     
-  /* Returns the maximum allowed timestep. Note that the actual timestep
-   * taken should usually be much below this to ensure accurate
-   * simulation - just never above.
-   *
-   * Not used.
-   */
-  // double maxTimestep() {
+  /* Fill all solid related fields - that is, _cell, _body and _normalX/Y */
+  void fillSolidFields(FluidQuantity* fq) {
     
-  //   double maxVelocity = 0.0;
+    if (_bodies.size() == 0)
+      return;
 
-  //   MaxVelocityFunctor::apply(*_u, *_v, maxVelocity, _w, _h);
+    FillSolidFieldsFunctor::apply(fq->_cell,
+				  fq->_body,
+				  fq->_normalX,
+				  fq->_normalY,
+				  _bodies,
+				  _w, _h, fq->_ox, fq->_oy,
+				  _hx);
     
-  //   /* Fluid should not flow more than two grid cells per iteration */
-  //   double maxTimestep = 2.0*_hx/maxVelocity;
-        
-  //   /* Clamp to sensible maximum value in case of very small velocities */
-  //   return std::min(maxTimestep, 1.0);
-    
-  // }
-    
+  } // fillSolidFields
+
   /* Convert fluid density to RGBA image */
   void toImage(unsigned char *rgba) {
 
