@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
   bodies(0) = SolidBody(SolidBody::BOX,0.5, 0.6, 0.7, 0.1, M_PI*0.25, 0.0, 0.0, 0.0);
 
   
-  FluidSolver *solver = new FluidSolver(sizeX, sizeY, density);
+  FluidSolver *solver = new FluidSolver(sizeX, sizeY, density, bodies);
 
   double time = 0.0;
   int iterations = 0;

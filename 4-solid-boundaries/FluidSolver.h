@@ -182,9 +182,10 @@ class FluidSolver {
   }
     
 public:
-  FluidSolver(int w, int h, double density) :
+  FluidSolver(int w, int h, double density, SolidBodyList bodies) :
     _w(w), _h(h),
-    _density(density)
+    _density(density),
+    _bodies(bodies)
   {
     _hx = 1.0/std::min(w, h);
         
