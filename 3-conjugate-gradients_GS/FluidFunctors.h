@@ -377,10 +377,9 @@ public:
   /**
    * \param[out] dst
    * \param[in]  a
-   * \param[in]  aPlusX
-   * \param[in]  aPlusY
    * \param[in]  w width
    * \param[in]  h height
+   * \param[in]  omega relaxation parameter
    * \param[in]  red_black type (can only be RED or BLACK)
    */
   ApplyPreconditionerFunctor(Array2d dst,
@@ -481,8 +480,6 @@ public:
   } // operator()
 
   Array2d dst ,a;
-  Array2d precon;
-  Array2d aPlusX, aPlusY;
   int w, h;
   double omega;
   RedBlack_t red_black;
