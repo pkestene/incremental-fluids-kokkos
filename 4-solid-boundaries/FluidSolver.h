@@ -253,7 +253,7 @@ public:
     AdvectionFunctor::apply(*_d,*_u,*_v,_bodies,timestep);
     AdvectionFunctor::apply(*_u,*_u,*_v,_bodies,timestep);
     AdvectionFunctor::apply(*_v,*_u,*_v,_bodies,timestep);
-        
+    
     /* Make effect of advection visible, since it's not an in-place operation */
     _d->flip();
     _u->flip();

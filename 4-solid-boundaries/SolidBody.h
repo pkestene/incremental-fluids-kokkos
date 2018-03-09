@@ -65,6 +65,8 @@ protected:
     
 public:
 
+  SolidBody() {};
+  
   SolidBody(solid_type type,
 	    double posX, double posY, double scaleX, double scaleY,
 	    double theta, double velX, double velY, double velTheta) :
@@ -219,6 +221,6 @@ public:
 }; // class SolidBody
 
 /// typedef to define an array (Kokkos::View) of SolidBody
-using SolidBodyList = Kokkos::View<SolidBody,Device>;
+using SolidBodyList = Kokkos::View<SolidBody*,Device>;
 
 #endif // SOLID_BODIES_H_
