@@ -1052,7 +1052,127 @@ public:
   double _oy;
   double _hx;
 
-}; // class SetBoundaryConditionFunctor
+}; // class FillSolidFieldsFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * FillSolidMask functor.
+ *
+ * Prepare auxiliary array for extrapolation.
+ * The purpose of extrapolation is to extrapolate fluid quantities into
+ * solids, where these quantities would normally be undefined. However, we
+ * need these values for stable interpolation and boundary conditions.
+ *
+ * The way these are extrapolated here is by essentially solving a PDE,
+ * such that the gradient of the fluid quantity is 0 along the gradient
+ * of the distance field. This is essentially a more robust formulation of
+ * "Set quantity inside solid to the value at the closest point on the
+ * solid-fluid boundary"
+ *
+ * This PDE has a particular form which makes it very easy to solve exactly
+ * using an upwinding scheme. What this means is that we can solve it from
+ * outside-to-inside, with information flowing along the normal from the
+ * boundary.
+ *
+ * Specifically, we can solve for the value inside a fluid cell using
+ * extrapolateNormal if the two adjacent grid cells in "upstream" direction
+ * (where the normal points to) are either fluid cells or have been solved
+ * for already.
+ *
+ * The mask array keeps track of which cells wait for which values. If an
+ * entry is 0, it means both neighbours are available and the cell is ready
+ * for the PDE solve. If it is 1, the cell waits for the neighbour in
+ * x direction, 2 for y-direction and 3 for both.
+ *
+ *
+ * Here we implement a kokkos port of the refactored step4, found in 
+ * https://github.com/pkestene/incremental-fluids in branch step4_refactoring, 
+ * using directory 4-solid-boundaries_refactored.
+ *
+ * We changed the main data structure: mask is an unordered map, which in turn becomes
+ * a Kokkos::UnorderedMap. We also restore some data parallelism.
+ */
+class FillSolidMaskFunctor {
+
+public:
+
+  /**
+   * \param[in,out]     data is an array to extrapolate inside solid
+   * \param[in]         cell is array of cell types
+   * \param[in,out]     mask_map is array of
+   * \param[in,out]     normalX
+   * \param[in,out]     normalY
+   * \param[in]         bodies
+   */
+  FillSolidMaskFunctor(Array2d       data,
+		       Array2d_uchar cell,
+		       MaskMap2d     mask_map,
+		       Array2d       normalX,
+		       Array2d       normalY,
+                       int w,
+		       int h,
+		       double ox,
+		       double oy,
+		       double hx) :
+    _data(data),
+    _cell(cell),
+    _mask_map(mask_map),
+    _normalX(normalX),
+    _normalY(normalY),
+    _w(w),
+    _h(h),
+    _ox(ox),
+    _oy(oy),
+    _hx(hx)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d       data,
+		    Array2d_uchar cell,
+                    MaskMap2d     mask_map,
+		    Array2d       normalX,
+		    Array2d       normalY,
+		    int w,
+		    int h,
+		    double ox,
+		    double oy,
+		    double hx)
+  {
+    const int size = w*h;
+    FillSolidMaskFunctor functor(data, cell, mask_map,
+				 normalX, normalY, w, h, ox, oy, hx);
+    Kokkos::parallel_for(size, functor);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    // this functor is supposed to be launched with _w*_h iterations
+    // it has been slightly modified (compared to serial version)
+    // to avoid data race
+    
+    int ix, iy;
+    index2coord(index,ix,iy,_w,_h);
+
+    // TODO
+    
+  } // end operator()
+
+  Array2d       _data;
+  Array2d_uchar _cell;
+  MaskMap2d     _mask_map;
+  Array2d       _normalX;
+  Array2d       _normalY;
+  int _w;
+  int _h;
+  double _ox;
+  double _oy;
+  double _hx;
+
+}; // class FillSolidMaskFunctor
 
 // ==================================================================
 // ==================================================================
