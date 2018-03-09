@@ -869,13 +869,20 @@ public:
     int x, y;
     index2coord(index,x,y,_w,_h);
 
-    if (_cell(x,y) == CELL_SOLID) {
+    if (_cell(x,y) == CELL_SOLID or _cell(x-1,y) == CELL_SOLID) {
+      
       const SolidBody &b = _bodies(_body(x,y));
       
       _u(x    , y    ) = b.velocityX(  x       *_hx , (y + 0.5)*_hx );
+      
+    }
+
+    if (_cell(x,y) == CELL_SOLID or _cell(x,y-1) == CELL_SOLID) {
+
+      const SolidBody &b = _bodies(_body(x,y));
+
       _v(x    , y    ) = b.velocityY( (x + 0.5)*_hx ,  y       *_hx );
-      _u(x + 1, y    ) = b.velocityX( (x + 1.0)*_hx , (y + 0.5)*_hx );
-      _v(x    , y + 1) = b.velocityY( (x + 0.5)*_hx , (y + 1.0)*_hx );
+      
     }
 
     // deal with extra borders (left and right),
