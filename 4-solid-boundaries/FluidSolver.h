@@ -6,6 +6,7 @@
 #include "FluidFunctors.h"
 #include "SolidBody.h"
 
+
 /* Computes `dst' = `a' + `b'*`s' */
 void scaledAdd(Array2d dst, Array2d a, Array2d b, double s) {
   
@@ -31,6 +32,7 @@ class FluidSolver {
   FluidQuantity *_v;
 
   Array2dHost _src_host;
+  Array2dHost_uchar _cell_host;
   
   /* Width and height */
   int _w;
@@ -51,13 +53,15 @@ class FluidSolver {
   Array2d _aDiag;  /* Matrix diagonal */
   Array2d _aPlusX; /* Matrix off-diagonals */
   Array2d _aPlusY;
+
+  SolidBodyList _bodies;
   
   /* Builds the pressure right hand side as the negative divergence */
   void buildRhs() {
 
     double scale = 1.0/_hx;
 
-    BuildRHSFunctor::apply(_r, _u->_src, _v->_src, scale, _w, _h);
+    BuildRHSFunctor::apply(_r, _u->_src, _v->_src, _d->_cell, scale, _w, _h);
     
   } // buildRhs
 
@@ -74,7 +78,7 @@ class FluidSolver {
     
     // buildPressureMatrix
     // serial version refactored to avoid data-race
-    BuildPressureMatrixFunctor::apply(_aDiag, _aPlusX, _aPlusY, scale, _w, _h);    
+    BuildPressureMatrixFunctor::apply(_aDiag, _aPlusX, _aPlusY, _d->_cell, scale, _w, _h);    
   } // buildPressureMatrix
 
 
@@ -84,7 +88,7 @@ class FluidSolver {
     double omega = 1.5;
     int nbIter = 10;
     reset_view(dst);
-    ApplyPreconditionerFunctor::apply(dst, a, _w, _h, omega, nbIter);
+    ApplyPreconditionerFunctor::apply(dst, a, _d->_cell, _w, _h, omega, nbIter);
     
   } // applyPreconditioner
 
@@ -162,8 +166,19 @@ class FluidSolver {
 
     double scale = timestep/(_density*_hx);
 
-    ApplyPressureFunctor::apply(_p, _u->_src, _v->_src, scale, _w, _h);
+    ApplyPressureFunctor::apply(_p, _u->_src, _v->_src, _d->_cell, scale, _w, _h);
 
+  }
+
+  void setBoundaryCondition() {
+
+    SetBoundaryConditionFunctor::apply(_u->_src,
+				       _v->_src,
+				       _d->_cell,
+				       _d->_body,
+				       _bodies,
+				       _w, _h, _hx);
+    
   }
     
 public:
@@ -178,6 +193,7 @@ public:
     _v = new FluidQuantity(_w,     _h + 1, 0.5, 0.0, _hx);
 
     _src_host = Array2dHost("data_on_host",_w,_h);
+    _cell_host = Array2dHost_uchar("cell_on_host",_w,_h);
     
     // Array2d are ref counted
     _r  = Array2d("pressure_rhs",_w,_h);
@@ -210,6 +226,14 @@ public:
   }
   
   void update(double timestep) {
+
+    // fill solidFields - TODO
+    //FillSolidFields(_bodies);
+    //FillSolidFields(_bodies);
+    //FillSolidFields(_bodies);
+    
+    setBoundaryCondition();
+    
     // compute scale divergence of velocity field
     buildRhs();
 
@@ -219,6 +243,11 @@ public:
     // update velocity field with pressure gradient
     applyPressure(timestep);
 
+    // extrapolate functor TODO
+    //ExtrapolateFunctor::apply();
+    //ExtrapolateFunctor::apply();
+    //ExtrapolateFunctor::apply();
+    
     // update velocity field with advection
     AdvectionFunctor::apply(*_d,*_u,*_v,timestep);
     AdvectionFunctor::apply(*_u,*_u,*_v,timestep);
@@ -265,13 +294,18 @@ public:
     // copy current density array to a temporary destination on "host"
     // which can then be used to save data to a file
     Kokkos::deep_copy(_src_host, _d->_src);
+    Kokkos::deep_copy(_cell_host, _d->_cell);
 
     double *data = _src_host.ptr_on_device();
+    uint8_t *cell = _cell_host.ptr_on_device();
     
     for (int i = 0; i < _w*_h; i++) {
       int shade = (int)((1.0 - data[i])*255.0);
       shade = std::max(std::min(shade, 255), 0);
-            
+
+      if (cell[i] == CELL_SOLID)
+	shade = 0.0;
+      
       rgba[i*4 + 0] = shade;
       rgba[i*4 + 1] = shade;
       rgba[i*4 + 2] = shade;

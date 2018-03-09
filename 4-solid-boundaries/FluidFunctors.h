@@ -9,6 +9,7 @@
 #endif // __CUDA_ARCH__
 
 #include "FluidQuantity.h"
+#include "SolidBody.h"
 
 // ==================================================================
 // ==================================================================
@@ -226,21 +227,24 @@ public:
    * \param[in]     r is the RHS   (_w  , _h  )
    * \param[in,out] u is the x velocity (_w+1, _h  )
    * \param[in,out] v is the y velocity (_w  , _h+1)
+   * \param[in]     cell is the array of cell type (CELL_FLUID or CELL_SOLID)
    */
-  BuildRHSFunctor(Array2d r, Array2d u, Array2d v, double scale, int w, int h) :
+  BuildRHSFunctor(Array2d r, Array2d u, Array2d v, Array2d_uchar cell, double scale, int w, int h) :
     _r(r),
     _u(u),
     _v(v),
-    scale(scale),
+    _cell(cell),
+    _scale(scale),
     _w(w),
     _h(h)
   {};
 
   // static method which does it all: create and execute functor
-  static void apply(Array2d r, Array2d u, Array2d v, double scale, int w, int h)
+  static void apply(Array2d r, Array2d u, Array2d v, Array2d_uchar cell,
+		    double scale, int w, int h)
   {
     const int size = w*h;
-    BuildRHSFunctor functor(r, u, v, scale, w, h);
+    BuildRHSFunctor functor(r, u, v, cell, scale, w, h);
     Kokkos::parallel_for(size, functor);
   }
 
@@ -251,15 +255,20 @@ public:
     int x, y;
     index2coord(index,x,y,_w,_h);
 
-    _r(x,y) = -scale * (_u(x + 1, y    ) - _u(x, y) +
-			_v(x    , y + 1) - _v(x, y) );
+    if (_cell(x,y) == CELL_FLUID) {
+      _r(x,y) = -_scale * (_u(x + 1, y    ) - _u(x, y) +
+			   _v(x    , y + 1) - _v(x, y) );
+    } else {
+      _r(x,y) = 0.0;
+    }
     
   } // operator()
 
-  Array2d _r;
-  Array2d _u, _v;
-  double scale;
-  int _w,_h;
+  Array2d       _r;
+  Array2d       _u, _v;
+  Array2d_uchar _cell;
+  double        _scale;
+  int           _w,_h;
   
 }; // class BuildRHSFunctor
 
@@ -289,12 +298,15 @@ public:
    * \param[out] aDiag  (_w, _h)
    * \param[out] aPlusX (_w, _h)
    * \param[out] aPlusY (_w, _h)
+   * \param[in]  cell (_w,_h) : array of cell type
    */
   BuildPressureMatrixFunctor(Array2d aDiag, Array2d aPlusX, Array2d aPlusY,
+			     Array2d_uchar cell,
 			     double scale, int w, int h) :
     aDiag(aDiag),
     aPlusX(aPlusX),
     aPlusY(aPlusY),
+    cell(cell),
     scale(scale),
     _w(w),
     _h(h)
@@ -302,10 +314,11 @@ public:
 
   // static method which does it all: create and execute functor
   static void apply(Array2d aDiag, Array2d aPlusX, Array2d aPlusY,
+		    Array2d_uchar cell,
 		    double scale, int w, int h)
   {
     const int size = w*h;
-    BuildPressureMatrixFunctor functor(aDiag, aPlusX, aPlusY, scale, w, h);
+    BuildPressureMatrixFunctor functor(aDiag, aPlusX, aPlusY, cell, scale, w, h);
     Kokkos::parallel_for(size, functor);
   }
 
@@ -315,39 +328,58 @@ public:
 
     int x, y;
     index2coord(index,x,y,_w,_h);
-    
-    if ( (x==0    and y==0   ) ||
-	 (x==0    and y==_h-1) ||
-	 (x==_w-1 and y==0   ) ||
-	 (x==_w-1 and y==_h-1) ) { // corners
-      aDiag(x,y) = 2*scale;
-    } else if ( (x==0               and y>0     and y<_h-1) ||
-		(x==_w-1            and y>0     and y<_h-1) ||
-		(x>0     and x<_w-1 and y==0)               ||
-		(x>0     and x<_w-1 and y==_h-1) ) { // borders
-      aDiag(x,y) = 3*scale;
-    } else { // bulk
-      aDiag(x,y) = 4*scale;
-    }
 
-    if (x<_w-1) {
-      aPlusX(x,y) = -scale;
-    } else {
-      aPlusX(x,y) = 0.0;
-    }
+    if (cell(x,y) == CELL_FLUID) {
     
-    if (y<_h-1) {
-      aPlusY(x,y) = -scale;
+      if ( (x==0    and y==0   ) ||
+	   (x==0    and y==_h-1) ||
+	   (x==_w-1 and y==0   ) ||
+	   (x==_w-1 and y==_h-1) ) { // corners
+	aDiag(x,y) = 2*scale;
+      } else if ( (x==0               and y>0     and y<_h-1) ||
+		  (x==_w-1            and y>0     and y<_h-1) ||
+		  (x>0     and x<_w-1 and y==0)               ||
+		  (x>0     and x<_w-1 and y==_h-1) ) { // borders
+	aDiag(x,y) = 3*scale;
+      } else { // bulk
+	aDiag(x,y) = 4*scale;
+      }
+      
+      if (x<_w-1) {
+	aPlusX(x,y) = -scale;
+      } else {
+	aPlusX(x,y) = 0.0;
+      }
+      
+      if (y<_h-1) {
+	aPlusY(x,y) = -scale;
+      } else {
+	aPlusY(x,y) = 0.0;
+      }
+
+      // take care of neighbor solid cells
+      if (cell(x+1,y) == CELL_SOLID) {
+	aDiag(x,y) -= scale;
+	aPlusX(x,y) = 0.0;;
+      }
+
+      // take care of neighbor solid cells
+      if (cell(x,y+1) == CELL_SOLID) {
+	aDiag(x,y) -= scale;
+	aPlusY(x,y) = 0.0;;
+      }
+      
     } else {
-      aPlusY(x,y) = 0.0;
+      // don't do anything,
+      // aDiag, aPlusX, aPlusY have been reset previous calling this functor
     }
-    
   } // operator()
 
-  Array2d aDiag;
-  Array2d aPlusX, aPlusY;
-  double scale;
-  int _w,_h;
+  Array2d       aDiag;
+  Array2d       aPlusX, aPlusY;
+  Array2d_uchar cell;
+  double        scale;
+  int           _w,_h;
   
 }; // class BuildPressureMatrixFunctor
 
@@ -377,20 +409,22 @@ public:
   /**
    * \param[out] dst
    * \param[in]  a
-   * \param[in]  aPlusX
-   * \param[in]  aPlusY
+   * \param[in]  cell : array of cell type
    * \param[in]  w width
    * \param[in]  h height
+   * \param[in]  omega relaxation parameter
    * \param[in]  red_black type (can only be RED or BLACK)
    */
   ApplyPreconditionerFunctor(Array2d dst,
 			     Array2d a,
+			     Array2d_uchar cell,
 			     int w,
 			     int h,
 			     double omega,
 			     RedBlack_t red_black) :
     dst(dst),
     a(a),
+    cell(cell),
     w(w),
     h(h),
     omega(omega),
@@ -399,7 +433,7 @@ public:
   {};
 
   // static method which does it all: create and execute functor
-  static void apply(Array2d dst, Array2d a,
+  static void apply(Array2d dst, Array2d a, Array2d_uchar cell,
                     int w, int h,
 		    double omega,
 		    int nbIter)
@@ -410,21 +444,21 @@ public:
 
       // forward
       {
-	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,RED);
+	ApplyPreconditionerFunctor functor(dst,a,cell,w,h,omega,RED);
 	Kokkos::parallel_for(size, functor);
       }
       {
-	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,BLACK);
+	ApplyPreconditionerFunctor functor(dst,a,cell,w,h,omega,BLACK);
 	Kokkos::parallel_for(size, functor);
       }
 
       // backward (inverse colors)
       {
-	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,BLACK);
+	ApplyPreconditionerFunctor functor(dst,a,cell,w,h,omega,BLACK);
 	Kokkos::parallel_for(size, functor);
       }
       {
-	ApplyPreconditionerFunctor functor(dst,a,w,h,omega,RED);
+	ApplyPreconditionerFunctor functor(dst,a,cell,w,h,omega,RED);
 	Kokkos::parallel_for(size, functor);
       }
 
@@ -441,27 +475,31 @@ public:
      * stencil. Grid borders are assumed to be solid, i.e.
      * there is no fluid outside the simulation domain.
      */
-    if (x > 0) {
-      diag    += scale;
-      offDiag -= scale*dst(x - 1, y    );
-    }
-    if (y > 0) {
-      diag    += scale;
-      offDiag -= scale*dst(x    , y - 1);
-    }
-    if (x < w - 1) {
-      diag    += scale;
-      offDiag -= scale*dst(x + 1, y    );
-    }
-    if (y < h - 1) {
-      diag    += scale;
-      offDiag -= scale*dst(x    , y + 1);
-    }
-
-    // here is the Successive over-relaxation
-    double new_val = (1-omega)*dst(x,y) + omega * ( a(x,y) - offDiag ) / diag;
+    if (cell(x,y)==CELL_FLUID) {
+      
+      if (x > 0 and cell(x-1,y)==CELL_FLUID) {
+	diag    += scale;
+	offDiag -= scale*dst(x - 1, y    );
+      }
+      if (y > 0 and cell(x,y-1)==CELL_FLUID) {
+	diag    += scale;
+	offDiag -= scale*dst(x    , y - 1);
+      }
+      if (x < w - 1 and cell(x+1,y)==CELL_FLUID) {
+	diag    += scale;
+	offDiag -= scale*dst(x + 1, y    );
+      }
+      if (y < h - 1 and cell(x,y+1)==CELL_FLUID) {
+	diag    += scale;
+	offDiag -= scale*dst(x    , y + 1);
+      }
+      
+      // here is the Successive Over-Relaxation
+      double new_val = (1-omega)*dst(x,y) + omega * ( a(x,y) - offDiag ) / diag;
     
-    dst(x,y) = new_val;
+      dst(x,y) = new_val;
+      
+    }
     
   } // do_red_black
 
@@ -481,8 +519,7 @@ public:
   } // operator()
 
   Array2d dst ,a;
-  Array2d precon;
-  Array2d aPlusX, aPlusY;
+  Array2d_uchar cell;
   int w, h;
   double omega;
   RedBlack_t red_black;
@@ -715,13 +752,16 @@ public:
    * \param[in]     p is the pressure   (_w  , _h  )
    * \param[in,out] u is the x velocity (_w+1, _h  )
    * \param[in,out] v is the y velocity (_w  , _h+1)
+   * \param[in]     cell is array of cell type (_w,_h)
    */
   ApplyPressureFunctor(Array2d p,
 		       Array2d u, Array2d v,
+		       Array2d_uchar cell,
 		       double scale, int w, int h) :
     _p(p),
     _u(u),
     _v(v),
+    _cell(cell),
     _scale(scale),
     _w(w),
     _h(h)
@@ -730,10 +770,11 @@ public:
   // static method which does it all: create and execute functor
   static void apply(Array2d p,
 		    Array2d u, Array2d v,
+		    Array2d_uchar cell,
 		    double scale, int w, int h)
   {
     const int size = w*h;
-    ApplyPressureFunctor functor(p, u, v, scale, w, h);
+    ApplyPressureFunctor functor(p, u, v, cell, scale, w, h);
     Kokkos::parallel_for(size, functor);
   }
 
@@ -748,13 +789,94 @@ public:
     int x, y;
     index2coord(index,x,y,_w,_h);
 
-    _u(x, y) -= _scale * _p(x  ,y  );
-    if (x>0)
-      _u(x, y) += _scale * _p(x-1,y  );
+    if (_cell(x,y) == CELL_FLUID) {
+      
+      _u(x, y) -= _scale * _p(x  ,y  );
+      if (x>0)
+	_u(x, y) += _scale * _p(x-1,y  );
+      
+      _v(x, y) -= _scale * _p(x  ,y  );
+      if (y>0)
+	_v(x, y) += _scale * _p(x  ,y-1);
+
+    }
+
+  } // operator()
+
+  Array2d _p;
+  Array2d _u, _v;
+  Array2d_uchar _cell;
+  double _scale;
+  int _w,_h;
+  
+}; // class ApplyPressureFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * Set boundary condition functor.
+ *
+ * Sets all velocity cells bordering solid cells to the solid velocity.
+ *
+ */
+class SetBoundaryConditionFunctor
+{
+
+public:
+
+  /**
+   * \param[in,out] u is the x velocity (_w+1, _h  )
+   * \param[in,out] v is the y velocity (_w  , _h+1)
+   * \param[in]     cell is array of cell type (_w,_h)
+   */
+  SetBoundaryConditionFunctor(Array2d u,
+			      Array2d v,
+			      Array2d_uchar cell,
+			      Array2d_uchar body,
+			      SolidBodyList bodies,
+			      int w, int h, double hx) :
+    _u(u),
+    _v(v),
+    _cell(cell),
+    _body(body),
+    _bodies(bodies),
+    _w(w),
+    _h(h),
+    _hx(hx)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d u, Array2d v,
+		    Array2d_uchar cell,
+		    Array2d_uchar body,
+		    SolidBodyList bodies,
+		    int w, int h, double hx)
+  {
+    const int size = w*h;
+    SetBoundaryConditionFunctor functor(u, v, cell, body, bodies, w, h, hx);
+    Kokkos::parallel_for(size, functor);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    // this functor is supposed to be launched with _w*_h iterations
+    // it has been slightly modified (compared to serial version)
+    // to avoid data race
     
-    _v(x, y) -= _scale * _p(x  ,y  );
-    if (y>0)
-      _v(x, y) += _scale * _p(x  ,y-1);
+    int x, y;
+    index2coord(index,x,y,_w,_h);
+
+    if (_cell(x,y) == CELL_SOLID) {
+      const SolidBody &b = _bodies(_body(x,y));
+      
+      _u(x    , y    ) = b.velocityX(  x       *_hx , (y + 0.5)*_hx );
+      _v(x    , y    ) = b.velocityY( (x + 0.5)*_hx ,  y       *_hx );
+      _u(x + 1, y    ) = b.velocityX( (x + 1.0)*_hx , (y + 0.5)*_hx );
+      _v(x    , y + 1) = b.velocityY( (x + 0.5)*_hx , (y + 1.0)*_hx );
+    }
 
     // deal with extra borders (left and right),
     // !!! beware u is sized _w+1,_h
@@ -763,20 +885,22 @@ public:
       _u(0 , y ) = 0.0;
       _u(_w, y ) = 0.0;
     }
-
+    
     if (y==0) {
       _v(x , 0 ) = 0.0;
       _v(x , _h) = 0.0;
     }
-    
+
   } // operator()
 
-  Array2d _p;
   Array2d _u, _v;
-  double _scale;
+  Array2d_uchar _cell;
+  Array2d_uchar _body;
+  SolidBodyList _bodies;
   int _w,_h;
-  
-}; // class ApplyPressureFunctor
+  double _hx;
+
+}; // class SetBoundaryConditionFunctor
 
 // ==================================================================
 // ==================================================================
