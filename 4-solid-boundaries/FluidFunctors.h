@@ -30,10 +30,12 @@ public:
   AdvectionFunctor(FluidQuantity data,
 		   FluidQuantity u,
 		   FluidQuantity v,
+		   SolidBodyList bodies,
 		   double timestep) :
     data(data),
     u(u),
     v(v),
+    bodies(bodies),
     timestep(timestep),
     _w(data._w),
     _h(data._h),
@@ -47,9 +49,10 @@ public:
   static void apply(FluidQuantity data,
 		    FluidQuantity u,
 		    FluidQuantity v,
+		    SolidBodyList bodies,
 		    double timestep) {
     const int size = data._w*data._h;
-    AdvectionFunctor functor(data, u, v, timestep);
+    AdvectionFunctor functor(data, u, v, bodies, timestep);
     Kokkos::parallel_for(size, functor);
   }
     
@@ -91,6 +94,25 @@ public:
     
   } // rungeKutta3
 
+  /* 
+   * If the point (x, y) is inside a solid, project it back out to the
+   * closest point on the surface of the solid.
+   */
+  KOKKOS_INLINE_FUNCTION
+  void backProject(double &x, double &y) const
+  {
+    
+    int rx = imin(imax((int)(x - _ox), 0), _w - 1);
+    int ry = imin(imax((int)(y - _oy), 0), _h - 1);
+    
+    if (data._cell(rx,ry) != CELL_FLUID) {
+      x = (x - _ox)*_hx;
+      y = (y - _oy)*_hx;
+      bodies(data._body(rx,ry)).closestSurfacePoint(x, y);
+      x = x/_hx + _ox;
+      y = y/_hx + _oy;
+    }
+  } // backProject
   
   // Advect grid in velocity field u, v with given timestep
   KOKKOS_INLINE_FUNCTION
@@ -107,7 +129,13 @@ public:
     
     // First component: Integrate in time, update x and y
     rungeKutta3(x, y);
-    
+
+    /* If integrating back in time leaves us inside a solid
+     * boundary (due to numerical error), make sure we
+     * interpolate from a point inside the fluid.
+     */
+    backProject(x, y);
+
     // Second component: Interpolate from grid
     data._dst(ix,iy) = data.cerp(x, y);
     
@@ -116,6 +144,7 @@ public:
   FluidQuantity data;
   FluidQuantity u;
   FluidQuantity v;
+  SolidBodyList bodies;
   double timestep;
   int _w;
   int _h;
