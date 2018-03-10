@@ -293,7 +293,6 @@ public:
     int nbReady=0;
     FillSolidMaskFunctor::apply(fq->_cell,fq->_mask_map,
 				fq->_normalX,fq->_normalY,_w,_h,
-				fq->_ox,fq->_oy,_hx,
 				nbTodo, nbReady);
 
     printf("fill solid mask: %d %d\n",nbTodo,nbReady);

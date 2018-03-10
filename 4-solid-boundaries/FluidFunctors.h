@@ -1117,19 +1117,13 @@ public:
 		       Array2d       normalX,
 		       Array2d       normalY,
                        int w,
-		       int h,
-		       double ox,
-		       double oy,
-		       double hx) :
+		       int h) :
     _cell(cell),
     _mask_map(mask_map),
     _normalX(normalX),
     _normalY(normalY),
     _w(w),
-    _h(h),
-    _ox(ox),
-    _oy(oy),
-    _hx(hx)
+    _h(h)
   {};
 
   // static method which does it all: create and execute functor
@@ -1139,16 +1133,13 @@ public:
 		    Array2d       normalY,
 		    int w,
 		    int h,
-		    double ox,
-		    double oy,
-		    double hx,
 		    int& nbTodo,
 		    int& nbReady)
   {
     MaskSumCell sumCell = {0, 0};
     const int size = w*h;
     FillSolidMaskFunctor functor(cell, mask_map,
-				 normalX, normalY, w, h, ox, oy, hx);
+				 normalX, normalY, w, h);
     Kokkos::parallel_reduce(size, functor, sumCell);
     nbTodo = sumCell.nbTodo;
     nbReady = sumCell.nbReady;
@@ -1208,11 +1199,9 @@ public:
   Array2d       _normalY;
   int _w;
   int _h;
-  double _ox;
-  double _oy;
-  double _hx;
 
 }; // class FillSolidMaskFunctor
+
 
 
 
