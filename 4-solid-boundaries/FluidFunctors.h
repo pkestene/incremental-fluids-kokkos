@@ -1112,8 +1112,7 @@ public:
    * \param[in,out]     normalY
    * \param[in]         bodies
    */
-  FillSolidMaskFunctor(Array2d       data,
-		       Array2d_uchar cell,
+  FillSolidMaskFunctor(Array2d_uchar cell,
 		       MaskMap2d     mask_map,
 		       Array2d       normalX,
 		       Array2d       normalY,
@@ -1122,7 +1121,6 @@ public:
 		       double ox,
 		       double oy,
 		       double hx) :
-    _data(data),
     _cell(cell),
     _mask_map(mask_map),
     _normalX(normalX),
@@ -1135,8 +1133,7 @@ public:
   {};
 
   // static method which does it all: create and execute functor
-  static void apply(Array2d       data,
-		    Array2d_uchar cell,
+  static void apply(Array2d_uchar cell,
                     MaskMap2d     mask_map,
 		    Array2d       normalX,
 		    Array2d       normalY,
@@ -1150,7 +1147,7 @@ public:
   {
     MaskSumCell sumCell = {0, 0};
     const int size = w*h;
-    FillSolidMaskFunctor functor(data, cell, mask_map,
+    FillSolidMaskFunctor functor(cell, mask_map,
 				 normalX, normalY, w, h, ox, oy, hx);
     Kokkos::parallel_reduce(size, functor, sumCell);
     nbTodo = sumCell.nbTodo;
@@ -1205,7 +1202,6 @@ public:
     dst.nbReady += src.nbReady;
   } // join
 
-  Array2d       _data;
   Array2d_uchar _cell;
   MaskMap2d     _mask_map;
   Array2d       _normalX;
@@ -1218,9 +1214,6 @@ public:
 
 }; // class FillSolidMaskFunctor
 
-// ==================================================================
-// ==================================================================
-// ==================================================================
 
 
 // ==================================================================
