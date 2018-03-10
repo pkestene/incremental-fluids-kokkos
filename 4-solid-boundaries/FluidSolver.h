@@ -86,9 +86,10 @@ class FluidSolver {
   void applyPreconditioner(Array2d dst, Array2d a) {
 
     double omega = 1.5;
-    int nbIter = 10;
-    reset_view(dst);
-    ApplyPreconditionerFunctor::apply(dst, a, _d->_cell, _w, _h, omega, nbIter);
+    int nbIter = 1;
+    //reset_view(dst);
+    //ApplyPreconditionerFunctor::apply(dst, a, _d->_cell, _w, _h, omega, nbIter);
+    Kokkos::deep_copy(dst,a);
     
   } // applyPreconditioner
 
@@ -239,16 +240,17 @@ public:
     buildRhs();
 
     // compute pressure
-    project(2000);
+    project(200);
 
     // update velocity field with pressure gradient
     applyPressure(timestep);
 
     // extrapolate functor TODO
-    extrapolate(_d);
-    //ExtrapolateFunctor::apply();
-    //ExtrapolateFunctor::apply();
-    //ExtrapolateFunctor::apply();
+    //extrapolate(_d);
+    //extrapolate(_u);
+    //extrapolate(_v);
+
+    setBoundaryCondition();
     
     // update velocity field with advection
     AdvectionFunctor::apply(*_d,*_u,*_v,_bodies,timestep);
@@ -281,10 +283,21 @@ public:
 				  fq->_normalX,
 				  fq->_normalY,
 				  _bodies,
-				  _w, _h, fq->_ox, fq->_oy,
+				  _w,
+				  _h,
+				  fq->_ox,
+				  fq->_oy,
 				  _hx);
     
   } // fillSolidFields
+
+  // count number of TODO cells
+  int get_number_of_cells_per_state(MaskMap2d mask_map,
+				    CellMaskState state) {
+    
+    return GetNumberofCellsPerStateFunctor::apply(mask_map,state);
+    
+  } // get_number_of_cells_per_state
 
   void extrapolate(FluidQuantity *fq) {
 
@@ -297,6 +310,25 @@ public:
 
     printf("fill solid mask: %d %d\n",nbTodo,nbReady);
 
+    // compute cells that are in READY mode right after fillSolidMask
+    ExtrapolateSolidCellReadyFunctor::apply(fq->_src,
+					    fq->_cell,
+					    fq->_mask_map,
+					    fq->_normalX,
+					    fq->_normalY,_w,_h,1);
+
+    // as long as there are solid cells to compute,
+    // sweep the mask map for cell to
+    // extrapolate (in TODO state)
+    nbTodo  = get_number_of_cells_per_state(fq->_mask_map,TODO);
+    printf("extrapolate - nbTodo %d",nbTodo);
+    
+    //while (nbTodo > 0) {
+      // compute cells that are ready
+
+      
+    //}
+    
   } // extrapolate
   
   /* Convert fluid density to RGBA image */

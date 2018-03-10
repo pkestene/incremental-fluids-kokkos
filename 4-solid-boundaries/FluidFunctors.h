@@ -359,44 +359,32 @@ public:
     index2coord(index,x,y,_w,_h);
 
     if (cell(x,y) == CELL_FLUID) {
-    
-      if ( (x==0    and y==0   ) ||
-	   (x==0    and y==_h-1) ||
-	   (x==_w-1 and y==0   ) ||
-	   (x==_w-1 and y==_h-1) ) { // corners
-	aDiag(x,y) = 2*scale;
-      } else if ( (x==0               and y>0     and y<_h-1) ||
-		  (x==_w-1            and y>0     and y<_h-1) ||
-		  (x>0     and x<_w-1 and y==0)               ||
-		  (x>0     and x<_w-1 and y==_h-1) ) { // borders
-	aDiag(x,y) = 3*scale;
-      } else { // bulk
-	aDiag(x,y) = 4*scale;
-      }
+
+      // for aDiag, we need to count the number of neighbors that are also
+      // in state CELL_FLUID
+      // default value is 4
+      int nbFluidNeighbor = 4;
       
-      if (x<_w-1) {
-	aPlusX(x,y) = -scale;
-      } else {
+      if ( x==0    or (x>0    and cell(x-1,y) != CELL_FLUID) )
+	nbFluidNeighbor--;
+      if ( x==_w-1 or (x<_w-1 and cell(x+1,y) != CELL_FLUID) )
+	nbFluidNeighbor--;
+      if ( y==0    or (y>0    and cell(y-1,y) != CELL_FLUID) )
+	nbFluidNeighbor--;
+      if ( y==_h-1 or (y<_h-1 and cell(y+1,y) != CELL_FLUID) )
+	nbFluidNeighbor--;
+
+      aDiag(x,y) = scale*nbFluidNeighbor;
+      
+      if (x==_w-1 or (x<_w-1 and cell(x+1,y) != CELL_FLUID) )
 	aPlusX(x,y) = 0.0;
-      }
-      
-      if (y<_h-1) {
-	aPlusY(x,y) = -scale;
-      } else {
+      else
+	aPlusX(x,y) = -scale;
+	
+      if (y==_h-1 or (y<_h-1 and cell(x,y+1) != CELL_FLUID) )
 	aPlusY(x,y) = 0.0;
-      }
-
-      // take care of neighbor solid cells
-      if (cell(x+1,y) == CELL_SOLID) {
-	aDiag(x,y) -= scale;
-	aPlusX(x,y) = 0.0;;
-      }
-
-      // take care of neighbor solid cells
-      if (cell(x,y+1) == CELL_SOLID) {
-	aDiag(x,y) -= scale;
-	aPlusY(x,y) = 0.0;;
-      }
+      else
+	aPlusY(x,y) = -scale;
       
     } else {
       // don't do anything,
@@ -504,31 +492,30 @@ public:
      * stencil. Grid borders are assumed to be solid, i.e.
      * there is no fluid outside the simulation domain.
      */
-    if (cell(x,y)==CELL_FLUID) {
-      
-      if (x > 0 and cell(x-1,y)==CELL_FLUID) {
-	diag    += scale;
-	offDiag -= scale*dst(x - 1, y    );
-      }
-      if (y > 0 and cell(x,y-1)==CELL_FLUID) {
-	diag    += scale;
-	offDiag -= scale*dst(x    , y - 1);
-      }
-      if (x < w - 1 and cell(x+1,y)==CELL_FLUID) {
-	diag    += scale;
-	offDiag -= scale*dst(x + 1, y    );
-      }
-      if (y < h - 1 and cell(x,y+1)==CELL_FLUID) {
-	diag    += scale;
-	offDiag -= scale*dst(x    , y + 1);
-      }
-      
-      // here is the Successive Over-Relaxation
-      double new_val = (1-omega)*dst(x,y) + omega * ( a(x,y) - offDiag ) / diag;
+    if (cell(x,y)!=CELL_FLUID)
+      return;
     
-      dst(x,y) = new_val;
-      
+    if (x > 0 and cell(x-1,y)==CELL_FLUID) {
+      diag    += scale;
+      offDiag -= scale*dst(x - 1, y    );
     }
+    if (y > 0 and cell(x,y-1)==CELL_FLUID) {
+      diag    += scale;
+      offDiag -= scale*dst(x    , y - 1);
+    }
+    if (x < w - 1 and cell(x+1,y)==CELL_FLUID) {
+      diag    += scale;
+      offDiag -= scale*dst(x + 1, y    );
+    }
+    if (y < h - 1 and cell(x,y+1)==CELL_FLUID) {
+      diag    += scale;
+      offDiag -= scale*dst(x    , y + 1);
+    }
+    
+    // here is the Successive Over-Relaxation
+    double new_val = (1-omega)*dst(x,y) + omega * ( a(x,y) - offDiag ) / diag;
+    
+    dst(x,y) = new_val;
     
   } // do_red_black
 
@@ -898,7 +885,7 @@ public:
     int x, y;
     index2coord(index,x,y,_w,_h);
 
-    if (_cell(x,y) == CELL_SOLID or _cell(x-1,y) == CELL_SOLID) {
+    if (_cell(x,y) == CELL_SOLID) {
       
       const SolidBody &b = _bodies(_body(x,y));
       
@@ -906,9 +893,26 @@ public:
       
     }
 
-    if (_cell(x,y) == CELL_SOLID or _cell(x,y-1) == CELL_SOLID) {
+    if (_cell(x-1,y) == CELL_SOLID) {
+
+      const SolidBody &b = _bodies(_body(x-1,y));
+      
+      _u(x    , y    ) = b.velocityX(  x       *_hx , (y + 0.5)*_hx );
+      
+    }
+
+
+    if (_cell(x,y) == CELL_SOLID) {
 
       const SolidBody &b = _bodies(_body(x,y));
+
+      _v(x    , y    ) = b.velocityY( (x + 0.5)*_hx ,  y       *_hx );
+      
+    }
+
+    if (_cell(x,y-1) == CELL_SOLID) {
+
+      const SolidBody &b = _bodies(_body(x,y-1));
 
       _v(x    , y    ) = b.velocityY( (x + 0.5)*_hx ,  y       *_hx );
       
@@ -1105,12 +1109,10 @@ public:
   };
   
   /**
-   * \param[in,out]     data is an array to extrapolate inside solid
    * \param[in]         cell is array of cell types
    * \param[in,out]     mask_map is array of
-   * \param[in,out]     normalX
-   * \param[in,out]     normalY
-   * \param[in]         bodies
+   * \param[in]         normalX
+   * \param[in]         normalY
    */
   FillSolidMaskFunctor(Array2d_uchar cell,
 		       MaskMap2d     mask_map,
@@ -1202,8 +1204,289 @@ public:
 
 }; // class FillSolidMaskFunctor
 
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * Extrapolate inside solid cells functor.
+ *
+ * compute cells that are in READY mode right after fillSolidMask,
+ * modify mask values from TODO to DONE.
+ * 
+ */
+class ExtrapolateSolidCellReadyFunctor {
 
+  typedef MaskMap2d::size_type  size_type;    // int
+  //typedef MaskMap2d::key_type   key_type;     // int 
+  //typedef MaskMap2d::value_type value_type;   // uint8_t
 
+public:
+  /**
+   * \param[in,out]     src is an array to extrapolate inside solid
+   * \param[in]         cell is array of cell types
+   * \param[in,out]     mask_map is array of
+   * \param[in]         normalX
+   * \param[in]         normalY
+   * \param[in]         bodies
+   */
+  ExtrapolateSolidCellReadyFunctor(Array2d       src,
+				   Array2d_uchar cell,
+				   MaskMap2d     mask_map,
+				   Array2d       normalX,
+				   Array2d       normalY,
+				   int           w,
+				   int           h,
+				   int           step) :
+    _src(src),
+    _cell(cell),
+    _mask_map(mask_map),
+    _normalX(normalX),
+    _normalY(normalY),
+    _w(w),
+    _h(h),
+    _step(step)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d       src,
+		    Array2d_uchar cell,
+                    MaskMap2d     mask_map,
+		    Array2d       normalX,
+		    Array2d       normalY,
+		    int           w,
+		    int           h,
+		    int           step)
+  {
+    const int size = w*h;
+    ExtrapolateSolidCellReadyFunctor functor(src, cell, mask_map,
+					     normalX, normalY, w, h,step);
+    Kokkos::parallel_for(size, functor);
+  }
+
+  /* Solve for value at index idx using values of neighbours in normal x/y
+   * direction. The value is computed such that the directional derivative
+   * along distance field normal is 0.
+   */
+  KOKKOS_INLINE_FUNCTION
+  double extrapolateNormal(int ix, int iy) const {
+    double nx = _normalX(ix,iy);
+    double ny = _normalY(ix,iy);
+        
+    double srcX = _src(ix + sgn(nx),iy         );
+    double srcY = _src(ix          ,iy+ sgn(ny));
+        
+    return (fabs(nx)*srcX + fabs(ny)*srcY)/(fabs(nx) + fabs(ny));
+  } // extrapolateNormal
+
+  KOKKOS_INLINE_FUNCTION
+  int find_neighbor_idx(int key, int dir) const {
+  }
+  
+  /* Given that a neighbour in upstream direction specified by mask (1=x, 2=y)
+   * now has been solved for, update the mask appropriately and, if this cell
+   * can now be computed, add it to the queue of ready cells
+   */
+  // return true if at least 2 neighbors are in DONE state,
+  // meaning all upwind neighbors have already been computed,
+  // and meaning that current cell can flip in READY
+  KOKKOS_INLINE_FUNCTION
+  bool is_ready_to_compute(int ix, int iy) const {
+
+    int nbDone=0;
+    // if (_cell(ix-1,iy) != CELL_FLUID and
+    // 	umap[idx-1] == DONE)
+    //   nbDone++;
+    // if (_cell(ix+1,iy) != CELL_FLUID and umap[idx+1] == DONE)
+    //   nbDone++;
+    // if (_cell(ix,iy-1) != CELL_FLUID and umap[idx-_w] == DONE)
+    //   nbDone++;
+    // if (_cell(ix,iy+1) != CELL_FLUID and umap[idx+_w] == DONE)
+      nbDone++;
+    
+    return (nbDone >=2);
+    
+  } //is_ready_to_compute
+
+  KOKKOS_INLINE_FUNCTION
+  void step1 (const size_type& index) const
+  {
+
+    if (_mask_map.valid_at(index)) {
+
+      // get key
+      int idx = _mask_map.key_at(index);
+
+      // get location
+      int ix, iy;
+      index2coord(idx,ix,iy,_w,_h);
+
+      // get mask value at location
+      uint8_t mask = _mask_map.value_at(index);
+      
+      if (_cell(ix,iy) != CELL_FLUID and mask == READY) {
+	
+	// cell can be computed
+	// Solve for value in cell */
+	_src(ix,iy) = extrapolateNormal(ix,iy);
+	
+	//_mask_map.insert(idx,DONE);
+	_mask_map.value_at(index) = DONE;
+	
+      }
+
+    }
+
+  } // end step1
+  
+  KOKKOS_INLINE_FUNCTION
+  void step2 (const size_type& index) const
+  {
+
+    if (_mask_map.valid_at(index)) {
+
+      // get key
+      int idx = _mask_map.key_at(index);
+
+      // get location
+      int ix, iy;
+      index2coord(idx,ix,iy,_w,_h);
+
+      // get mask value at location
+      uint8_t mask = _mask_map.value_at(index);
+      
+      if (_cell(ix,iy) != CELL_FLUID and
+	  mask != DONE and
+	  is_ready_to_compute(ix,iy)) {
+	
+	// cell can be computed
+	// Solve for value in cell */
+	_src(ix,iy) = extrapolateNormal(ix,iy);
+	
+	//_mask_map.insert(idx,DONE);
+	_mask_map.value_at(index) = DONE;
+	
+      }
+
+    }
+
+  } // end step2
+  
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const size_type& index) const
+  {
+
+    if (_mask_map.valid_at(index)) {
+
+      // get key
+      int idx = _mask_map.key_at(index);
+      int ix, iy;
+      index2coord(idx,ix,iy,_w,_h);
+      uint8_t mask = _mask_map.value_at(index);
+      
+      if (_cell(ix,iy) != CELL_FLUID and mask == READY) {
+	
+	// cell can be computed
+	// Solve for value in cell */
+	_src(ix,iy) = extrapolateNormal(ix,iy);
+	
+	//_mask_map.insert(idx,DONE);
+	_mask_map.value_at(index) = DONE;
+	
+      }
+
+    }
+
+  } // end operator()
+  
+  Array2d       _src;
+  Array2d_uchar _cell;
+  MaskMap2d     _mask_map;
+  Array2d       _normalX;
+  Array2d       _normalY;
+  int           _w;
+  int           _h;
+  int           _step;
+
+  
+};  // class ExtrapolateSolidCellReadyFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * Get number of cells such that value is in a given state functor.
+ *
+ * compute number cells in a given state.
+ * 
+ */
+class GetNumberofCellsPerStateFunctor {
+
+public:
+  /**
+   * \param[in,out]     src is an array to extrapolate inside solid
+   * \param[in]         cell is array of cell types
+   * \param[in,out]     mask_map is array of
+   * \param[in]         normalX
+   * \param[in]         normalY
+   * \param[in]         bodies
+   */
+  GetNumberofCellsPerStateFunctor(MaskMap2d     mask_map,
+				  uint8_t       state) : 
+    _mask_map(mask_map),
+    _state(state)
+  {};
+
+  // static method which does it all: create and execute functor
+  static int apply(MaskMap2d mask_map,
+		   uint8_t   state)
+  {
+    int nbState = 0;
+    GetNumberofCellsPerStateFunctor functor(mask_map, state);
+    Kokkos::parallel_reduce(mask_map.capacity(), functor, nbState);
+    return nbState;
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index, int& count) const
+  {
+
+    if (_mask_map.valid_at(index)) {
+
+      // get value at index
+      uint8_t mask = _mask_map.value_at(index);
+      
+      if (mask == _state) {
+	
+	count++;
+	
+      }
+
+    }
+
+  } // end operator()
+
+    // Tell each thread how to initialize its reduction result.
+  KOKKOS_INLINE_FUNCTION
+  void init (int& dst) const
+  {
+    dst = 0;
+  } // init
+
+  // "Join" intermediate results from different threads.
+  // This should normally implement the same reduction
+  // operation as operator() above. Note that both input
+  // arguments MUST be declared volatile.
+  KOKKOS_INLINE_FUNCTION
+  void join (volatile       int& dst,
+             const volatile int& src) const
+  {
+    dst  += src;
+  } // join
+
+  MaskMap2d     _mask_map;
+  uint8_t       _state;
+
+};  // class GetNumberofCellsPerStateFunctor
 
 // ==================================================================
 // ==================================================================
