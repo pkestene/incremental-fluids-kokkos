@@ -28,6 +28,12 @@ enum CellType {
     CELL_SOLID
 };
 
+enum CellMaskState : uint8_t {
+  TODO,
+  READY,
+  DONE
+};
+
 /* This is the class representing fluid quantities such as density and velocity
  * on the MAC grid. It saves attributes such as offset from the top left grid
  * cell, grid width and height as well as cell size.
@@ -117,8 +123,9 @@ public:
 
     _cell = Array2d_uchar("_cell",_w,_h);
     _body = Array2d_uchar("_body",_w,_h);
-    _mask = Array2d_uchar("_mask",_w,_h);
+    //_mask = Array2d_uchar("_mask",_w,_h);
 
+    _mask_map = MaskMap2d(_w*_h);
   }
   
   ~FluidQuantity() {

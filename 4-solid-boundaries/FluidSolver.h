@@ -245,6 +245,7 @@ public:
     applyPressure(timestep);
 
     // extrapolate functor TODO
+    extrapolate(_d);
     //ExtrapolateFunctor::apply();
     //ExtrapolateFunctor::apply();
     //ExtrapolateFunctor::apply();
@@ -285,6 +286,20 @@ public:
     
   } // fillSolidFields
 
+  void extrapolate(FluidQuantity *fq) {
+
+    // fill solid mask
+    int nbTodo=0;
+    int nbReady=0;
+    FillSolidMaskFunctor::apply(fq->_src,fq->_cell,fq->_mask_map,
+				fq->_normalX,fq->_normalY,_w,_h,
+				fq->_ox,fq->_oy,_hx,
+				nbTodo, nbReady);
+
+    printf("fill solid mask: %d %d\n",nbTodo,nbReady);
+
+  } // extrapolate
+  
   /* Convert fluid density to RGBA image */
   void toImage(unsigned char *rgba) {
 

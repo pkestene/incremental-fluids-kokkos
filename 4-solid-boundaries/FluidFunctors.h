@@ -1098,6 +1098,12 @@ class FillSolidMaskFunctor {
 
 public:
 
+  // a custom data structure for the parallel_reduce sum
+  struct MaskSumCell {
+    int nbTodo;
+    int nbReady;
+  };
+  
   /**
    * \param[in,out]     data is an array to extrapolate inside solid
    * \param[in]         cell is array of cell types
@@ -1138,16 +1144,21 @@ public:
 		    int h,
 		    double ox,
 		    double oy,
-		    double hx)
+		    double hx,
+		    int& nbTodo,
+		    int& nbReady)
   {
+    MaskSumCell sumCell = {0, 0};
     const int size = w*h;
     FillSolidMaskFunctor functor(data, cell, mask_map,
 				 normalX, normalY, w, h, ox, oy, hx);
-    Kokkos::parallel_for(size, functor);
+    Kokkos::parallel_reduce(size, functor, sumCell);
+    nbTodo = sumCell.nbTodo;
+    nbReady = sumCell.nbReady;
   }
 
   KOKKOS_INLINE_FUNCTION
-  void operator() (const int& index) const
+  void operator() (const int& index, MaskSumCell& sumCell) const
   {
 
     // this functor is supposed to be launched with _w*_h iterations
@@ -1157,9 +1168,42 @@ public:
     int ix, iy;
     index2coord(index,ix,iy,_w,_h);
 
-    // TODO
-    
+    if (_cell(ix,iy) != CELL_FLUID) {
+
+      	double nx = _normalX(ix,iy);
+	double ny = _normalY(ix,iy);
+	
+	if ( (nx != 0.0 && _cell(ix + sgn(nx) , iy) != CELL_FLUID) ||
+	     (ny != 0.0 && _cell(ix , iy + sgn(ny)) != CELL_FLUID) ) {
+	  _mask_map.insert(index, TODO);
+	  sumCell.nbTodo++;
+	} else {
+	  _mask_map.insert(index, READY);
+	  sumCell.nbReady++;
+	}
+      
+    }
+
   } // end operator()
+
+  // Tell each thread how to initialize its reduction result.
+  KOKKOS_INLINE_FUNCTION
+  void init (MaskSumCell& dst) const
+  {
+    dst = {0, 0};
+  } // init
+
+  // "Join" intermediate results from different threads.
+  // This should normally implement the same reduction
+  // operation as operator() above. Note that both input
+  // arguments MUST be declared volatile.
+  KOKKOS_INLINE_FUNCTION
+  void join (volatile MaskSumCell& dst,
+             const volatile MaskSumCell& src) const
+  {
+    dst.nbTodo  += src.nbTodo;
+    dst.nbReady += src.nbReady;
+  } // join
 
   Array2d       _data;
   Array2d_uchar _cell;
@@ -1173,6 +1217,11 @@ public:
   double _hx;
 
 }; // class FillSolidMaskFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+
 
 // ==================================================================
 // ==================================================================
