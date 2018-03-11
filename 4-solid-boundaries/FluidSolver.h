@@ -87,7 +87,7 @@ class FluidSolver {
   void applyPreconditioner(Array2d dst, Array2d a) {
 
     // a few Red-Black Gauss-Seidel iterations
-    if (0) {
+    if (1) {
       double omega = 1.5;
       int nbIter = 10;
       reset_view(dst);
@@ -99,7 +99,7 @@ class FluidSolver {
       ApplyJacobiPreconditionerFunctor::apply(dst, a, _d->_cell, _aDiag, _w, _h);
     }
 
-    if (1)
+    if (0)
       Kokkos::deep_copy(dst,a);
     
   } // applyPreconditioner
@@ -145,8 +145,6 @@ class FluidSolver {
      Kokkos::deep_copy(_s,_z);
      
      double maxError = infinityNorm(_r);
-     printf("starting CG with _r norm = %f\n",maxError);
-
      if (maxError < 1e-5)
        return;
      
@@ -160,8 +158,6 @@ class FluidSolver {
        scaledAdd(_r, _r, _z, -alpha);
        
        maxError = infinityNorm(_r);
-       //if (iter==0)
-       printf("iter %d starting CG with _r norm = %f\n",iter,maxError);
        if (maxError < 1e-5) {
 	 printf("Exiting solver after %d iterations, maximum error is %.15f\n", iter, maxError);
 	 return;

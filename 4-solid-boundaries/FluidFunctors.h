@@ -329,9 +329,12 @@ public:
    * \param[out] aPlusY (_w, _h)
    * \param[in]  cell (_w,_h) : array of cell type
    */
-  BuildPressureMatrixFunctor(Array2d aDiag, Array2d aPlusX, Array2d aPlusY,
+  BuildPressureMatrixFunctor(Array2d aDiag,
+			     Array2d aPlusX,
+			     Array2d aPlusY,
 			     Array2d_uchar cell,
-			     double scale, int w, int h) :
+			     double scale,
+			     int w, int h) :
     aDiag(aDiag),
     aPlusX(aPlusX),
     aPlusY(aPlusY),
@@ -342,9 +345,12 @@ public:
   {};
 
   // static method which does it all: create and execute functor
-  static void apply(Array2d aDiag, Array2d aPlusX, Array2d aPlusY,
+  static void apply(Array2d aDiag,
+		    Array2d aPlusX,
+		    Array2d aPlusY,
 		    Array2d_uchar cell,
-		    double scale, int w, int h)
+		    double scale,
+		    int w, int h)
   {
     const int size = w*h;
     BuildPressureMatrixFunctor functor(aDiag, aPlusX, aPlusY, cell, scale, w, h);
@@ -366,21 +372,23 @@ public:
       int nbFluidNeighbor = 4;
       
       if ( x==0    or (x>0    and cell(x-1,y) != CELL_FLUID) )
-	nbFluidNeighbor--;
+      	nbFluidNeighbor--;
       if ( x==_w-1 or (x<_w-1 and cell(x+1,y) != CELL_FLUID) )
-	nbFluidNeighbor--;
-      if ( y==0    or (y>0    and cell(y-1,y) != CELL_FLUID) )
-	nbFluidNeighbor--;
-      if ( y==_h-1 or (y<_h-1 and cell(y+1,y) != CELL_FLUID) )
-	nbFluidNeighbor--;
+      	nbFluidNeighbor--;
+      if ( y==0    or (y>0    and cell(x,y-1) != CELL_FLUID) )
+      	nbFluidNeighbor--;
+      if ( y==_h-1 or (y<_h-1 and cell(x,y+1) != CELL_FLUID) )
+      	nbFluidNeighbor--;
 
       aDiag(x,y) = scale*nbFluidNeighbor;
-      
+
+      // compute aPlusX
       if (x==_w-1 or (x<_w-1 and cell(x+1,y) != CELL_FLUID) )
 	aPlusX(x,y) = 0.0;
       else
 	aPlusX(x,y) = -scale;
-	
+
+      // compute aPlusY
       if (y==_h-1 or (y<_h-1 and cell(x,y+1) != CELL_FLUID) )
 	aPlusY(x,y) = 0.0;
       else
@@ -1233,17 +1241,17 @@ public:
 
     if (_cell(ix,iy) != CELL_FLUID) {
 
-      	double nx = _normalX(ix,iy);
-	double ny = _normalY(ix,iy);
-	
-	if ( (nx != 0.0 && _cell(ix + sgn(nx) , iy) != CELL_FLUID) ||
-	     (ny != 0.0 && _cell(ix , iy + sgn(ny)) != CELL_FLUID) ) {
-	  _mask_map.insert(index, TODO);
-	  sumCell.nbTodo++;
-	} else {
-	  _mask_map.insert(index, READY);
-	  sumCell.nbReady++;
-	}
+      double nx = _normalX(ix,iy);
+      double ny = _normalY(ix,iy);
+      
+      if ( (nx != 0.0 && _cell(ix + sgn(nx) , iy) != CELL_FLUID) ||
+	   (ny != 0.0 && _cell(ix , iy + sgn(ny)) != CELL_FLUID) ) {
+	_mask_map.insert(index, TODO);
+	sumCell.nbTodo++;
+      } else {
+	_mask_map.insert(index, READY);
+	sumCell.nbReady++;
+      }
       
     }
 
