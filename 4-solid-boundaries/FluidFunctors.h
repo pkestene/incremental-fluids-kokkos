@@ -492,14 +492,16 @@ public:
      * stencil. Grid borders are assumed to be solid, i.e.
      * there is no fluid outside the simulation domain.
      */
-    if (cell(x,y)!=CELL_FLUID)
+    if (cell(x,y)!=CELL_FLUID) {
+      dst(x,y) =0.0;
       return;
+    }
     
-    if (x > 0 and cell(x-1,y)==CELL_FLUID) {
+    if (x > 0     and cell(x-1,y)==CELL_FLUID) {
       diag    += scale;
       offDiag -= scale*dst(x - 1, y    );
     }
-    if (y > 0 and cell(x,y-1)==CELL_FLUID) {
+    if (y > 0     and cell(x,y-1)==CELL_FLUID) {
       diag    += scale;
       offDiag -= scale*dst(x    , y - 1);
     }
@@ -542,6 +544,77 @@ public:
   double scale;
   
 }; // class ApplyPreconditionerFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
+ * Apply preconditioner to vector `a' and store it in `dst' 
+ *
+ * Just use a Jacobi preconditioner.
+ *
+ * https://en.wikipedia.org/wiki/
+ *
+ */
+class ApplyJacobiPreconditionerFunctor
+{
+
+public:
+  
+  /**
+   * \param[out] dst
+   * \param[in]  a
+   * \param[in]  cell : array of cell type
+   * \param[in]  aDiag : array of diagonal terms of matrix A
+   * \param[in]  w width
+   * \param[in]  h height
+   */
+  ApplyJacobiPreconditionerFunctor(Array2d dst,
+				   Array2d a,
+				   Array2d_uchar cell,
+				   Array2d aDiag,
+				   int w,
+				   int h) :
+    dst(dst),
+    a(a),
+    cell(cell),
+    aDiag(aDiag),
+    w(w),
+    h(h)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d dst,
+		    Array2d a,
+		    Array2d_uchar cell,
+		    Array2d aDiag,
+                    int w, int h)
+  {
+    // max size of a diagonal is min(w,h)
+    const int size = w*h;
+    ApplyJacobiPreconditionerFunctor functor(dst,a,cell,aDiag,w,h);
+    Kokkos::parallel_for(size, functor);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    int x, y;
+    index2coord(index,x,y,w,h);
+
+    if (cell(x,y) != CELL_FLUID)
+      return;
+    dst(x,y) = a(x,y) / aDiag(x,y);
+     
+  } // operator()
+
+  Array2d dst ,a;
+  Array2d_uchar cell;
+  Array2d aDiag;
+  int w, h;
+  
+}; // class ApplyJacobiPreconditionerFunctor
 
 // ==================================================================
 // ==================================================================

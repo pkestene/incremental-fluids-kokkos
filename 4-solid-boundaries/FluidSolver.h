@@ -48,7 +48,6 @@ class FluidSolver {
 
   Array2d _z; /* Auxiliary vector */
   Array2d _s; /* Search vector */
-  Array2d _precon; /* Preconditioner */
   
   Array2d _aDiag;  /* Matrix diagonal */
   Array2d _aPlusX; /* Matrix off-diagonals */
@@ -75,6 +74,8 @@ class FluidSolver {
 
     // reset Array
     reset_view(_aDiag);
+    reset_view(_aPlusX);
+    reset_view(_aPlusY);
     
     // buildPressureMatrix
     // serial version refactored to avoid data-race
@@ -85,11 +86,21 @@ class FluidSolver {
   /* Apply preconditioner to vector `a' and store it in `dst' */
   void applyPreconditioner(Array2d dst, Array2d a) {
 
-    double omega = 1.5;
-    int nbIter = 1;
-    //reset_view(dst);
-    //ApplyPreconditionerFunctor::apply(dst, a, _d->_cell, _w, _h, omega, nbIter);
-    Kokkos::deep_copy(dst,a);
+    // a few Red-Black Gauss-Seidel iterations
+    if (0) {
+      double omega = 1.5;
+      int nbIter = 10;
+      reset_view(dst);
+      ApplyPreconditionerFunctor::apply(dst, a, _d->_cell, _w, _h, omega, nbIter);
+    }
+
+    // Jacobi preconditioner
+    if (0) {
+      ApplyJacobiPreconditionerFunctor::apply(dst, a, _d->_cell, _aDiag, _w, _h);
+    }
+
+    if (1)
+      Kokkos::deep_copy(dst,a);
     
   } // applyPreconditioner
 
@@ -134,10 +145,13 @@ class FluidSolver {
      Kokkos::deep_copy(_s,_z);
      
      double maxError = infinityNorm(_r);
+     printf("starting CG with _r norm = %f\n",maxError);
+
      if (maxError < 1e-5)
        return;
      
      double sigma = dotProduct(_z, _r);
+     
      for (int iter = 0; iter < limit; iter++) {
        matrixVectorProduct(_z, _s);
 
@@ -146,6 +160,8 @@ class FluidSolver {
        scaledAdd(_r, _r, _z, -alpha);
        
        maxError = infinityNorm(_r);
+       //if (iter==0)
+       printf("iter %d starting CG with _r norm = %f\n",iter,maxError);
        if (maxError < 1e-5) {
 	 printf("Exiting solver after %d iterations, maximum error is %.15f\n", iter, maxError);
 	 return;
@@ -223,13 +239,13 @@ public:
 
     // pressure matrix never changed, so build it here
     // computes aDiag, aPlusX, aPlusY
-    buildPressureMatrix(timestep);    
+    //buildPressureMatrix(timestep);    
 
   }
   
   void update(double timestep) {
 
-    // fill solidFields - TODO
+    // fill solidFields
     fillSolidFields(_d);
     fillSolidFields(_u);
     fillSolidFields(_v);
@@ -238,9 +254,10 @@ public:
     
     // compute scale divergence of velocity field
     buildRhs();
-
+    buildPressureMatrix(timestep);
+    
     // compute pressure
-    project(200);
+    project(600);
 
     // update velocity field with pressure gradient
     applyPressure(timestep);
