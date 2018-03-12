@@ -259,9 +259,9 @@ public:
     applyPressure(timestep);
 
     // extrapolate functor TODO
-    //extrapolate(_d);
-    //extrapolate(_u);
-    //extrapolate(_v);
+    extrapolate(_d);
+    extrapolate(_u);
+    extrapolate(_v);
 
     setBoundaryCondition();
     
@@ -305,42 +305,52 @@ public:
   } // fillSolidFields
 
   // count number of TODO cells
-  int get_number_of_cells_per_state(MaskMap2d mask_map,
+  int get_number_of_cells_per_state(Array2d_uchar mask,
 				    CellMaskState state) {
     
-    return GetNumberofCellsPerStateFunctor::apply(mask_map,state);
+    return GetNumberofCellsPerStateFunctor::apply(mask,_w,_h,state);
     
   } // get_number_of_cells_per_state
-
+  
   void extrapolate(FluidQuantity *fq) {
 
     // fill solid mask
     int nbTodo=0;
     int nbReady=0;
-    FillSolidMaskFunctor::apply(fq->_cell,fq->_mask_map,
+    FillSolidMaskFunctor::apply(fq->_cell,fq->_mask,
 				fq->_normalX,fq->_normalY,_w,_h,
 				nbTodo, nbReady);
 
-    printf("fill solid mask: %d %d\n",nbTodo,nbReady);
+    //printf("fill solid mask: nbTodo=%d nbReady=%d\n",nbTodo,nbReady);
 
     // compute cells that are in READY mode right after fillSolidMask
     ExtrapolateSolidCellReadyFunctor::apply(fq->_src,
 					    fq->_cell,
-					    fq->_mask_map,
+					    fq->_mask,
 					    fq->_normalX,
-					    fq->_normalY,_w,_h,1);
+					    fq->_normalY,_w,_h,
+					    ExtrapolateSolidCellReadyFunctor::STEP1);
 
     // as long as there are solid cells to compute,
     // sweep the mask map for cell to
     // extrapolate (in TODO state)
-    nbTodo  = get_number_of_cells_per_state(fq->_mask_map,TODO);
-    printf("extrapolate - nbTodo %d",nbTodo);
+    nbTodo  = get_number_of_cells_per_state(fq->_mask,TODO);
+    //printf("extrapolate - nbTodo %d\n",nbTodo);
     
-    //while (nbTodo > 0) {
-      // compute cells that are ready
-
+    while (nbTodo > 0) {
       
-    //}
+      // compute cells that are ready to flip
+      int nbFlip = ExtrapolateSolidCellReadyFunctor::apply(fq->_src,
+							   fq->_cell,
+							   fq->_mask,
+							   fq->_normalX,
+							   fq->_normalY,_w,_h,
+							   ExtrapolateSolidCellReadyFunctor::STEP2);
+      
+      //printf("number of cells that flipped to DONE : %d\n",nbFlip);
+      nbTodo -= nbFlip;
+      
+    }
     
   } // extrapolate
   
