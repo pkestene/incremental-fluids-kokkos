@@ -28,4 +28,4 @@ Incremental fluids with Kokkos
 The present repository is a naive parallelization of the fourt first steps with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability.
 
 Illustration of step4:
-![step4 with kokkos on GPU](https://gitlab.maisondelasimulation.fr/pkestene/incremental-fluids-kokkos/blob/master/step4.gif)
+![step4 with kokkos on GPU](/step4.gif)
