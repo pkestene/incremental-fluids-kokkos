@@ -25,7 +25,13 @@ If you want, you can also check out a couple of videos rendered with code from t
 Incremental fluids with Kokkos
 ==============================
 
-The present repository is a naive parallelization of the fourt first steps with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability.
+The present repository is a naive parallelization of the first four steps with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability.
+
+ - step1: setup the basic build blocks of an incompressible flow solver: advection + poisson solver to ensure incompressibility (divergence of velocity is zero)
+ - step2: modify advection (third order Runge Kutta)
+ - step3: improve the poisson solver: linear solver becomes a preconditioned conjugate gradient: here the preconditionner is not based the modified incomplete Cholesky factorization
+          but uses a few Gauss-Seidel SOR iterations instead, easier to parallelize
+ - step4: here we slightly deviates from the original step4; we modified the extrapolate operation to be more data parallelism oriented
 
 Illustration of step4:
 ![step4 with kokkos on GPU](/step4.gif)
