@@ -29,3 +29,25 @@ The present repository is a naive parallelization of the fourt first steps with 
 
 Illustration of step4:
 ![step4 with kokkos on GPU](/step4.gif)
+
+## build with Kokkos
+
+Make sure to do a recursive clone of this repository to get also Kokkos source (populated in external subdirectory).
+
+### build with Kokkos / OpenMP backend device
+
+```bash
+mkdir build_openmp; cd build_openmp
+cmake -DKOKKOS_ENABLE_OPENMP=ON -DKOKKOS_ENABLE_HWLOC=ON ..
+```
+
+### build with Kokkos / CUDA backend device
+
+```bash
+mkdir build_cuda; cd build_cuda
+export CXX=/path/to/nvcc_wrapper
+cmake -DKOKKOS_ENABLE_CUDA=ON -DKOKKOS_ENABLE_HWLOC=ON -DKOKKOS_ARCH=Maxwell50 ..
+```
+
+nvcc_wrapper is located in kokkos sources; here it should be in external/kokkos/bin/nvcc_wrapper
+
