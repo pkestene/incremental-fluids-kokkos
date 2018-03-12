@@ -31,7 +31,7 @@ public:
     SPHERE
   };
   
-protected:
+public:
   solid_type _type;
   double _posX; /* Position */
   double _posY;
@@ -65,16 +65,19 @@ protected:
     
 public:
 
+  KOKKOS_INLINE_FUNCTION
   SolidBody() {};
   
+  KOKKOS_INLINE_FUNCTION
   SolidBody(solid_type type,
 	    double posX, double posY, double scaleX, double scaleY,
 	    double theta, double velX, double velY, double velTheta) :
     _type(type),
     _posX(posX), _posY(posY), _scaleX(scaleX), _scaleY(scaleY),
     _theta(theta), _velX(velX), _velY(velY), _velTheta(velTheta) {}
-                
-  virtual ~SolidBody() {};
+
+  KOKKOS_INLINE_FUNCTION
+  ~SolidBody() {};
     
   /* Returns the signed distance from (x, y) to the nearest point on surface
    * of the solid. The distance is negative if (x, y) is inside the solid
@@ -82,9 +85,10 @@ public:
   KOKKOS_INLINE_FUNCTION
   double distance(double x, double y) const {
     if (_type == BOX)
-      distance_box(x,y);
+      return distance_box(x,y);
     if (_type == SPHERE)
-      distance_sphere(x,y);
+      return distance_sphere(x,y);
+    return 0.0;
   } // distance
 
   KOKKOS_INLINE_FUNCTION

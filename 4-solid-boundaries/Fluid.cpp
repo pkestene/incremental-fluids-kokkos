@@ -72,7 +72,11 @@ int main(int argc, char* argv[])
   unsigned char *image = new unsigned char[sizeX*sizeY*4];
 
   SolidBodyList bodies = SolidBodyList("list of solid bodies",1);
-  bodies(0) = SolidBody(SolidBody::BOX,0.5, 0.6, 0.7, 0.1, M_PI*0.25, 0.0, 0.0, 0.0);
+
+  // just one body
+  Kokkos::parallel_for(1, KOKKOS_LAMBDA(const int index) {
+      bodies(0) = SolidBody(SolidBody::BOX,0.5, 0.6, 0.7, 0.1, M_PI*0.25, 0.0, 0.0, 0.0);
+    });
 
   
   FluidSolver *solver = new FluidSolver(sizeX, sizeY, density, bodies);

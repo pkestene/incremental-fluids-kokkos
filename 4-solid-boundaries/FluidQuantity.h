@@ -8,7 +8,7 @@
 #include "SolidBody.h"
 
 // mask type for SolidBody extrapolate computation
-using MaskMap2d = Kokkos::UnorderedMap<int, uint8_t, Device>;
+//using MaskMap2d = Kokkos::UnorderedMap<int, uint8_t, Device>;
 
 /* Cubic pulse function.
  * Returns a value in range [0, 1].
@@ -29,6 +29,7 @@ enum CellType {
 };
 
 enum CellMaskState : uint8_t {
+  INVALID,
   TODO,
   READY,
   DONE
@@ -67,7 +68,7 @@ public:
   /* Auxiliary array used for extrapolation */
   Array2d_uchar _mask;
   
-  MaskMap2d _mask_map;
+  //MaskMap2d _mask_map;
   
   /* Width and height */
   int _w;
@@ -124,7 +125,8 @@ public:
     _cell = Array2d_uchar("_cell",_w,_h);
     _body = Array2d_uchar("_body",_w,_h);
     
-    _mask_map = MaskMap2d(_w*_h);
+    _mask = Array2d_uchar("_mask",_w,_h);
+    //_mask_map = MaskMap2d(_w*_h);
   }
   
   ~FluidQuantity() {

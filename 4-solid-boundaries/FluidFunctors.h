@@ -974,7 +974,7 @@ public:
       
     }
 
-    if (_cell(x-1,y) == CELL_SOLID) {
+    if (x>0 and _cell(x-1,y) == CELL_SOLID) {
 
       const SolidBody &b = _bodies(_body(x-1,y));
       
@@ -991,7 +991,7 @@ public:
       
     }
 
-    if (_cell(x,y-1) == CELL_SOLID) {
+    if (y>0 and _cell(x,y-1) == CELL_SOLID) {
 
       const SolidBody &b = _bodies(_body(x,y-1));
 
@@ -1191,18 +1191,18 @@ public:
   
   /**
    * \param[in]         cell is array of cell types
-   * \param[in,out]     mask_map is array of
+   * \param[in,out]     mask is array of state of solid cell cells
    * \param[in]         normalX
    * \param[in]         normalY
    */
   FillSolidMaskFunctor(Array2d_uchar cell,
-		       MaskMap2d     mask_map,
+		       Array2d_uchar mask,
 		       Array2d       normalX,
 		       Array2d       normalY,
                        int w,
 		       int h) :
     _cell(cell),
-    _mask_map(mask_map),
+    _mask(mask),
     _normalX(normalX),
     _normalY(normalY),
     _w(w),
@@ -1211,7 +1211,7 @@ public:
 
   // static method which does it all: create and execute functor
   static void apply(Array2d_uchar cell,
-                    MaskMap2d     mask_map,
+                    Array2d_uchar mask,
 		    Array2d       normalX,
 		    Array2d       normalY,
 		    int w,
@@ -1221,7 +1221,7 @@ public:
   {
     MaskSumCell sumCell = {0, 0};
     const int size = w*h;
-    FillSolidMaskFunctor functor(cell, mask_map,
+    FillSolidMaskFunctor functor(cell, mask,
 				 normalX, normalY, w, h);
     Kokkos::parallel_reduce(size, functor, sumCell);
     nbTodo = sumCell.nbTodo;
@@ -1246,10 +1246,10 @@ public:
       
       if ( (nx != 0.0 && _cell(ix + sgn(nx) , iy) != CELL_FLUID) ||
 	   (ny != 0.0 && _cell(ix , iy + sgn(ny)) != CELL_FLUID) ) {
-	_mask_map.insert(index, TODO);
+	_mask(ix,iy) = TODO;
 	sumCell.nbTodo++;
       } else {
-	_mask_map.insert(index, READY);
+	_mask(ix,iy) = READY;
 	sumCell.nbReady++;
       }
       
@@ -1277,7 +1277,7 @@ public:
   } // join
 
   Array2d_uchar _cell;
-  MaskMap2d     _mask_map;
+  Array2d_uchar _mask;
   Array2d       _normalX;
   Array2d       _normalY;
   int _w;
@@ -1296,23 +1296,25 @@ public:
  * 
  */
 class ExtrapolateSolidCellReadyFunctor {
-
-  typedef MaskMap2d::size_type  size_type;    // int
-  //typedef MaskMap2d::key_type   key_type;     // int 
-  //typedef MaskMap2d::value_type value_type;   // uint8_t
-
+  
 public:
+
+  enum ExtrapolateStep_t {
+    STEP1,
+    STEP2
+  };
+
   /**
    * \param[in,out]     src is an array to extrapolate inside solid
    * \param[in]         cell is array of cell types
-   * \param[in,out]     mask_map is array of
+   * \param[in,out]     mask is array of solide cell states
    * \param[in]         normalX
    * \param[in]         normalY
    * \param[in]         bodies
    */
   ExtrapolateSolidCellReadyFunctor(Array2d       src,
 				   Array2d_uchar cell,
-				   MaskMap2d     mask_map,
+				   Array2d_uchar mask,
 				   Array2d       normalX,
 				   Array2d       normalY,
 				   int           w,
@@ -1320,7 +1322,7 @@ public:
 				   int           step) :
     _src(src),
     _cell(cell),
-    _mask_map(mask_map),
+    _mask(mask),
     _normalX(normalX),
     _normalY(normalY),
     _w(w),
@@ -1329,19 +1331,24 @@ public:
   {};
 
   // static method which does it all: create and execute functor
-  static void apply(Array2d       src,
-		    Array2d_uchar cell,
-                    MaskMap2d     mask_map,
-		    Array2d       normalX,
-		    Array2d       normalY,
-		    int           w,
-		    int           h,
-		    int           step)
+  static int apply(Array2d       src,
+		   Array2d_uchar cell,
+		   Array2d_uchar mask,
+		   Array2d       normalX,
+		   Array2d       normalY,
+		   int           w,
+		   int           h,
+		   int           step)
   {
+    // this number is used to accumulate the number of cell that flips
+    // state to DONE (in step2).
+    // in step 1, just return 0 (non relevant)
+    int nbDoneFlip = 0;
     const int size = w*h;
-    ExtrapolateSolidCellReadyFunctor functor(src, cell, mask_map,
+    ExtrapolateSolidCellReadyFunctor functor(src, cell, mask,
 					     normalX, normalY, w, h,step);
-    Kokkos::parallel_for(size, functor);
+    Kokkos::parallel_reduce(size, functor, nbDoneFlip);
+    return nbDoneFlip;
   }
 
   /* Solve for value at index idx using values of neighbours in normal x/y
@@ -1358,10 +1365,6 @@ public:
         
     return (fabs(nx)*srcX + fabs(ny)*srcY)/(fabs(nx) + fabs(ny));
   } // extrapolateNormal
-
-  KOKKOS_INLINE_FUNCTION
-  int find_neighbor_idx(int key, int dir) const {
-  }
   
   /* Given that a neighbour in upstream direction specified by mask (1=x, 2=y)
    * now has been solved for, update the mask appropriately and, if this cell
@@ -1374,120 +1377,102 @@ public:
   bool is_ready_to_compute(int ix, int iy) const {
 
     int nbDone=0;
-    // if (_cell(ix-1,iy) != CELL_FLUID and
-    // 	umap[idx-1] == DONE)
-    //   nbDone++;
-    // if (_cell(ix+1,iy) != CELL_FLUID and umap[idx+1] == DONE)
-    //   nbDone++;
-    // if (_cell(ix,iy-1) != CELL_FLUID and umap[idx-_w] == DONE)
-    //   nbDone++;
-    // if (_cell(ix,iy+1) != CELL_FLUID and umap[idx+_w] == DONE)
+    if (_cell(ix-1,iy) != CELL_FLUID and _mask(ix-1,iy) == DONE)
+      nbDone++;
+    if (_cell(ix+1,iy) != CELL_FLUID and _mask(ix+1,iy) == DONE)
+      nbDone++;
+    if (_cell(ix,iy-1) != CELL_FLUID and _mask(ix,iy-1) == DONE)
+      nbDone++;
+    if (_cell(ix,iy+1) != CELL_FLUID and _mask(ix,iy+1) == DONE)
       nbDone++;
     
     return (nbDone >=2);
     
-  } //is_ready_to_compute
+  } // is_ready_to_compute
 
   KOKKOS_INLINE_FUNCTION
-  void step1 (const size_type& index) const
+  void step1 (const int& ix, const int& iy, int& count) const
   {
-
-    if (_mask_map.valid_at(index)) {
-
-      // get key
-      int idx = _mask_map.key_at(index);
-
-      // get location
-      int ix, iy;
-      index2coord(idx,ix,iy,_w,_h);
-
-      // get mask value at location
-      uint8_t mask = _mask_map.value_at(index);
+    
+    if (_cell(ix,iy) != CELL_FLUID and _mask(ix,iy) == READY) {
       
-      if (_cell(ix,iy) != CELL_FLUID and mask == READY) {
-	
-	// cell can be computed
-	// Solve for value in cell */
-	_src(ix,iy) = extrapolateNormal(ix,iy);
-	
-	//_mask_map.insert(idx,DONE);
-	_mask_map.value_at(index) = DONE;
-	
-      }
-
+      // cell can be computed
+      // Solve for value in cell */
+      _src(ix,iy) = extrapolateNormal(ix,iy);
+      
+      //_mask_map.insert(idx,DONE);
+      _mask(ix,iy) = DONE;
+      
     }
 
   } // end step1
   
   KOKKOS_INLINE_FUNCTION
-  void step2 (const size_type& index) const
+  void step2 (const int& ix, const int& iy, int& count) const
   {
 
-    if (_mask_map.valid_at(index)) {
-
-      // get key
-      int idx = _mask_map.key_at(index);
-
-      // get location
-      int ix, iy;
-      index2coord(idx,ix,iy,_w,_h);
-
-      // get mask value at location
-      uint8_t mask = _mask_map.value_at(index);
+    if (_cell(ix,iy) != CELL_FLUID and
+	_mask(ix,iy) != DONE and
+	is_ready_to_compute(ix,iy)) {
       
-      if (_cell(ix,iy) != CELL_FLUID and
-	  mask != DONE and
-	  is_ready_to_compute(ix,iy)) {
-	
-	// cell can be computed
-	// Solve for value in cell */
-	_src(ix,iy) = extrapolateNormal(ix,iy);
-	
-	//_mask_map.insert(idx,DONE);
-	_mask_map.value_at(index) = DONE;
-	
-      }
+      // cell can be computed
+      // Solve for value in cell */
+      _src(ix,iy) = extrapolateNormal(ix,iy);
+      
+      //_mask_map.insert(idx,DONE);
+      _mask(ix,iy) = DONE;
 
+      count++;
     }
-
+    
   } // end step2
   
   KOKKOS_INLINE_FUNCTION
-  void operator() (const size_type& index) const
+  void operator() (const int& index, int& count) const
   {
 
-    if (_mask_map.valid_at(index)) {
+    int ix, iy;
+    index2coord(index,ix,iy,_w,_h);
 
-      // get key
-      int idx = _mask_map.key_at(index);
-      int ix, iy;
-      index2coord(idx,ix,iy,_w,_h);
-      uint8_t mask = _mask_map.value_at(index);
-      
-      if (_cell(ix,iy) != CELL_FLUID and mask == READY) {
-	
-	// cell can be computed
-	// Solve for value in cell */
-	_src(ix,iy) = extrapolateNormal(ix,iy);
-	
-	//_mask_map.insert(idx,DONE);
-	_mask_map.value_at(index) = DONE;
-	
-      }
+    // if then else step1 / step2 
+    if (_step == STEP1) {
+
+      step1(ix,iy,count);
+
+    } else if (_step == STEP2) {
+
+      step2(ix,iy,count);
 
     }
-
+    
   } // end operator()
   
+  // Tell each thread how to initialize its reduction result.
+  KOKKOS_INLINE_FUNCTION
+  void init (int& dst) const
+  {
+    dst = 0;
+  } // init
+
+  // "Join" intermediate results from different threads.
+  // This should normally implement the same reduction
+  // operation as operator() above. Note that both input
+  // arguments MUST be declared volatile.
+  KOKKOS_INLINE_FUNCTION
+  void join (volatile       int& dst,
+             const volatile int& src) const
+  {
+    dst  += src;
+  } // join
+
   Array2d       _src;
   Array2d_uchar _cell;
-  MaskMap2d     _mask_map;
+  Array2d_uchar _mask;
   Array2d       _normalX;
   Array2d       _normalY;
   int           _w;
   int           _h;
   int           _step;
-
   
 };  // class ExtrapolateSolidCellReadyFunctor
 
@@ -1511,19 +1496,26 @@ public:
    * \param[in]         normalY
    * \param[in]         bodies
    */
-  GetNumberofCellsPerStateFunctor(MaskMap2d     mask_map,
+  GetNumberofCellsPerStateFunctor(Array2d_uchar mask,
+				  int           w,
+				  int           h,
 				  uint8_t       state) : 
-    _mask_map(mask_map),
+    _mask(mask),
+    _w(w),
+    _h(h),
     _state(state)
   {};
 
   // static method which does it all: create and execute functor
-  static int apply(MaskMap2d mask_map,
-		   uint8_t   state)
+  static int apply(Array2d_uchar mask,
+		   int           w,
+		   int           h,
+		   uint8_t       state)
   {
+    const int size = w*h;
     int nbState = 0;
-    GetNumberofCellsPerStateFunctor functor(mask_map, state);
-    Kokkos::parallel_reduce(mask_map.capacity(), functor, nbState);
+    GetNumberofCellsPerStateFunctor functor(mask, w, h, state);
+    Kokkos::parallel_reduce(size, functor, nbState);
     return nbState;
   }
 
@@ -1531,22 +1523,18 @@ public:
   void operator() (const int& index, int& count) const
   {
 
-    if (_mask_map.valid_at(index)) {
+    int ix, iy;
+    index2coord(index,ix,iy,_w,_h);
 
-      // get value at index
-      uint8_t mask = _mask_map.value_at(index);
+    if (_mask(ix,iy) == _state) {
+
+      count++;
       
-      if (mask == _state) {
-	
-	count++;
-	
-      }
-
     }
 
   } // end operator()
 
-    // Tell each thread how to initialize its reduction result.
+  // Tell each thread how to initialize its reduction result.
   KOKKOS_INLINE_FUNCTION
   void init (int& dst) const
   {
@@ -1564,7 +1552,9 @@ public:
     dst  += src;
   } // join
 
-  MaskMap2d     _mask_map;
+  Array2d_uchar _mask;
+  int           _w;
+  int           _h;
   uint8_t       _state;
 
 };  // class GetNumberofCellsPerStateFunctor
