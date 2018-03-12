@@ -974,7 +974,7 @@ public:
       
     }
 
-    if (_cell(x-1,y) == CELL_SOLID) {
+    if (x>0 and _cell(x-1,y) == CELL_SOLID) {
 
       const SolidBody &b = _bodies(_body(x-1,y));
       
@@ -991,7 +991,7 @@ public:
       
     }
 
-    if (_cell(x,y-1) == CELL_SOLID) {
+    if (y>0 and _cell(x,y-1) == CELL_SOLID) {
 
       const SolidBody &b = _bodies(_body(x,y-1));
 
