@@ -57,7 +57,7 @@ cmake -DKOKKOS_ENABLE_OPENMP=ON -DKOKKOS_ENABLE_HWLOC=ON ..
 ```bash
 mkdir build_cuda; cd build_cuda
 export CXX=/path/to/nvcc_wrapper
-cmake -DKOKKOS_ENABLE_CUDA=ON -DKOKKOS_ENABLE_HWLOC=ON -DKOKKOS_ARCH=Maxwell50 ..
+cmake -DKOKKOS_ENABLE_CUDA=ON -DKOKKOS_ENABLE_CUDA_LAMBDA=ON -DKOKKOS_ENABLE_HWLOC=ON -DKOKKOS_ARCH=Maxwell50 ..
 ```
 
 nvcc_wrapper is located in kokkos sources; here it should be in external/kokkos/bin/nvcc_wrapper
