@@ -45,10 +45,10 @@ TODO
 Incremental fluids (original readme)
 ====================================
 
+Original incremental fluid tutorial is available at https://github.com/tunabrain/incremental-fluids
+
 ![Fluid](https://raw.github.com/tunabrain/incremental-fluids/master/Header.png)
 
-
-Original incremental fluid tutorial is available at https://github.com/tunabrain/incremental-fluids
 
 The purpose of this project is to provide simple, easy to understand fluid solver implementations in C++, together with code documentation, algorithm explanation and recommended reading. It is meant for people with beginner to intermediate knowledge of computational fluid dynamics looking for working reference implementations to run and study.
 
