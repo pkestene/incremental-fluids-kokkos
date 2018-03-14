@@ -42,10 +42,11 @@ nvcc_wrapper is located in kokkos sources; here it should be in external/kokkos/
 
 TODO
 
-![Fluid](https://raw.github.com/tunabrain/incremental-fluids/master/Header.png)
-
 Incremental fluids (original readme)
 ====================================
+
+![Fluid](https://raw.github.com/tunabrain/incremental-fluids/master/Header.png)
+
 
 Original incremental fluid tutorial is available at https://github.com/tunabrain/incremental-fluids
 
