@@ -55,6 +55,18 @@ public:
   Array2d _src;
   Array2d _dst;
   
+  /* Distance field induced by solids.
+   * Since this is used to compute the cell volumes, the samples are offset
+   * by (-0.5, -0.5) from the samples in _src and the grid is one larger in
+   * each dimension. This way, each sample of fluid quantity has four samples
+   * of the distance function surrounding it - perfect for computing the
+   * cell volumes.
+   */
+  Array2d _phi;
+
+  /* Fractional cell volume occupied by fluid */
+  Array2d _volume;
+
   /* Normal of distance field at grid points */
   Array2d _normalX;
   Array2d _normalY;
@@ -119,6 +131,10 @@ public:
     _src = Array2d("_src",_w,_h);
     _dst = Array2d("_dst",_w,_h);
 
+    /* Make distance grid one larger in each dimension */
+    _phi = Array2d("_phi",_w + 1, _h + 1);
+    _volume  = Array2d("_volume",_w,_h);
+    
     _normalX = Array2d("_normalX",_w,_h);
     _normalY = Array2d("_normalY",_w,_h);
 
@@ -126,7 +142,18 @@ public:
     _body = Array2d_uchar("_body",_w,_h);
     
     _mask = Array2d_uchar("_mask",_w,_h);
-    //_mask_map = MaskMap2d(_w*_h);
+
+    // init _cell and _volume
+    {
+      
+      Kokkos::parallel_for(_w*_h, KOKKOS_LAMBDA(const int index) {
+	  int x, y;
+	  index2coord(index,x,y,_w,_h);
+	  _cell(x,y) = CELL_FLUID;
+	  _volume(x,y) = 1.0;
+	});
+    }
+    
   }
   
   ~FluidQuantity() {

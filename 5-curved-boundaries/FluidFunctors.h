@@ -258,7 +258,8 @@ public:
    * \param[in,out] v is the y velocity (_w  , _h+1)
    * \param[in]     cell is the array of cell type (CELL_FLUID or CELL_SOLID)
    */
-  BuildRHSFunctor(Array2d r, Array2d u, Array2d v, Array2d_uchar cell, double scale, int w, int h) :
+  BuildRHSFunctor(Array2d r, Array2d u, Array2d v,
+		  Array2d_uchar cell, double scale, int w, int h) :
     _r(r),
     _u(u),
     _v(v),
