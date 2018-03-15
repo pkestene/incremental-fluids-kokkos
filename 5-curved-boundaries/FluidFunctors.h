@@ -253,16 +253,23 @@ class BuildRHSFunctor
 public:
 
   /**
-   * \param[in]     r is the RHS   (_w  , _h  )
-   * \param[in,out] u is the x velocity (_w+1, _h  )
-   * \param[in,out] v is the y velocity (_w  , _h+1)
-   * \param[in]     cell is the array of cell type (CELL_FLUID or CELL_SOLID)
+   * \param[out]  r is the RHS   (_w  , _h  )
+   * \param[in]   u is the x velocity (_w+1, _h  )
+   * \param[in]   v is the y velocity (_w  , _h+1)
+   * \param[in]   dVol d volume array
+   * \param[in]   uVol u volume array
+   * \param[in]   vVol v volume array
+   * \param[in]   cell is the array of cell type (CELL_FLUID or CELL_SOLID)
    */
   BuildRHSFunctor(Array2d r, Array2d u, Array2d v,
+		  Array2d dVol, Array2d uVol, Array2d vVol,
 		  Array2d_uchar cell, double scale, int w, int h) :
     _r(r),
     _u(u),
     _v(v),
+    _dVol(dVol),
+    _uVol(uVol),
+    _vVol(vVol),
     _cell(cell),
     _scale(scale),
     _w(w),
@@ -270,11 +277,13 @@ public:
   {};
 
   // static method which does it all: create and execute functor
-  static void apply(Array2d r, Array2d u, Array2d v, Array2d_uchar cell,
+  static void apply(Array2d r, Array2d u, Array2d v,
+		    Array2d dVol, Array2d uVol, Array2d vVol,
+		    Array2d_uchar cell,
 		    double scale, int w, int h)
   {
     const int size = w*h;
-    BuildRHSFunctor functor(r, u, v, cell, scale, w, h);
+    BuildRHSFunctor functor(r, u, v, dVol, uVol, vVol, cell, scale, w, h);
     Kokkos::parallel_for(size, functor);
   }
 
@@ -286,8 +295,15 @@ public:
     index2coord(index,x,y,_w,_h);
 
     if (_cell(x,y) == CELL_FLUID) {
-      _r(x,y) = -_scale * (_u(x + 1, y    ) - _u(x, y) +
-			   _v(x    , y + 1) - _v(x, y) );
+      _r(x,y) = -_scale *
+	(_uVol(x+1,y) * _u(x+1,y) - _uVol(x,y)*_u(x, y) +
+	 _vVol(x,y+1) * _v(x,y+1) - _vVol(x,y)*_v(x, y) );
+
+      double vol = _dVol(x, y);
+      
+      //if (_bodies.empty())
+      //continue;
+      
     } else {
       _r(x,y) = 0.0;
     }
@@ -296,6 +312,8 @@ public:
 
   Array2d       _r;
   Array2d       _u, _v;
+  Array2d       _dVol;
+  Array2d       _uVol, _vVol;
   Array2d_uchar _cell;
   double        _scale;
   int           _w,_h;

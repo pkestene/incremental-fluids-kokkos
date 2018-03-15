@@ -60,7 +60,9 @@ class FluidSolver {
 
     double scale = 1.0/_hx;
 
-    BuildRHSFunctor::apply(_r, _u->_src, _v->_src, _d->_cell, scale, _w, _h);
+    BuildRHSFunctor::apply(_r, _u->_src, _v->_src,
+			   _d->_volume, _u->_volume, _v->_volume,
+			   _d->_cell, scale, _w, _h);
     
   } // buildRhs
 
