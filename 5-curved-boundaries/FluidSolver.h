@@ -33,6 +33,7 @@ class FluidSolver {
 
   Array2dHost _src_host;
   Array2dHost_uchar _cell_host;
+  Array2dHost _volume_host;
   
   /* Width and height */
   int _w;
@@ -81,7 +82,9 @@ class FluidSolver {
     
     // buildPressureMatrix
     // serial version refactored to avoid data-race
-    BuildPressureMatrixFunctor::apply(_aDiag, _aPlusX, _aPlusY, _d->_cell, scale, _w, _h);    
+    BuildPressureMatrixFunctor::apply(_aDiag, _aPlusX, _aPlusY, _d->_cell,
+				      _u->_volume, _v->_volume,
+				      scale, _w, _h);    
   } // buildPressureMatrix
 
 
@@ -210,6 +213,7 @@ public:
 
     _src_host = Array2dHost("data_on_host",_w,_h);
     _cell_host = Array2dHost_uchar("cell_on_host",_w,_h);
+    _volume_host = Array2dHost("volume_on_host",_w,_h);
     
     // Array2d are ref counted
     _r  = Array2d("pressure_rhs",_w,_h);
@@ -363,16 +367,15 @@ public:
     // which can then be used to save data to a file
     Kokkos::deep_copy(_src_host, _d->_src);
     Kokkos::deep_copy(_cell_host, _d->_cell);
-
+    Kokkos::deep_copy(_volume_host, _d->_volume);
+    
     double *data = _src_host.ptr_on_device();
-    uint8_t *cell = _cell_host.ptr_on_device();
+    double *data_volume = _volume_host.ptr_on_device();
     
     for (int i = 0; i < _w*_h; i++) {
-      int shade = (int)((1.0 - data[i])*255.0);
+      /* Use fluid volume for nice anti aliasing */
+      int shade = (int)((1.0 - data[i])*data_volume[i]*255.0);
       shade = std::max(std::min(shade, 255), 0);
-
-      if (cell[i] == CELL_SOLID)
-	shade = 0.0;
       
       rgba[i*4 + 0] = shade;
       rgba[i*4 + 1] = shade;

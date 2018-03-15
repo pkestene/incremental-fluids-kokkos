@@ -347,17 +347,23 @@ public:
    * \param[out] aPlusX (_w, _h)
    * \param[out] aPlusY (_w, _h)
    * \param[in]  cell (_w,_h) : array of cell type
+   * \param[in]  uVol
+   * \param[in]  vVol
    */
   BuildPressureMatrixFunctor(Array2d aDiag,
 			     Array2d aPlusX,
 			     Array2d aPlusY,
 			     Array2d_uchar cell,
+			     Array2d uVol,
+			     Array2d vVol,
 			     double scale,
 			     int w, int h) :
     aDiag(aDiag),
     aPlusX(aPlusX),
     aPlusY(aPlusY),
     cell(cell),
+    uVol(uVol),
+    vVol(vVol),
     scale(scale),
     _w(w),
     _h(h)
@@ -368,11 +374,15 @@ public:
 		    Array2d aPlusX,
 		    Array2d aPlusY,
 		    Array2d_uchar cell,
+		    Array2d uVol,
+		    Array2d vVol,
 		    double scale,
 		    int w, int h)
   {
     const int size = w*h;
-    BuildPressureMatrixFunctor functor(aDiag, aPlusX, aPlusY, cell, scale, w, h);
+    BuildPressureMatrixFunctor functor(aDiag, aPlusX, aPlusY, cell,
+				       uVol, vVol,
+				       scale, w, h);
     Kokkos::parallel_for(size, functor);
   }
 
@@ -388,30 +398,30 @@ public:
       // for aDiag, we need to count the number of neighbors that are also
       // in state CELL_FLUID
       // default value is 4
-      int nbFluidNeighbor = 4;
+      double tmp = 0;
       
-      if ( x==0    or (x>0    and cell(x-1,y) != CELL_FLUID) )
-      	nbFluidNeighbor--;
-      if ( x==_w-1 or (x<_w-1 and cell(x+1,y) != CELL_FLUID) )
-      	nbFluidNeighbor--;
-      if ( y==0    or (y>0    and cell(x,y-1) != CELL_FLUID) )
-      	nbFluidNeighbor--;
-      if ( y==_h-1 or (y<_h-1 and cell(x,y+1) != CELL_FLUID) )
-      	nbFluidNeighbor--;
+      if ( x>0    and cell(x-1,y) == CELL_FLUID)
+      	tmp += scale*uVol(x,y);
+      if ( x<_w-1 and cell(x+1,y) == CELL_FLUID)
+      	tmp += scale*uVol(x+1,y);
+      if ( y>0    and cell(x,y-1) == CELL_FLUID)
+      	tmp += scale*vVol(x,y);
+      if ( y<_h-1 and cell(x,y+1) == CELL_FLUID)
+      	tmp += scale*vVol(x,y+1);
 
-      aDiag(x,y) = scale*nbFluidNeighbor;
+      aDiag(x,y) = tmp;
 
       // compute aPlusX
-      if (x==_w-1 or (x<_w-1 and cell(x+1,y) != CELL_FLUID) )
-	aPlusX(x,y) = 0.0;
+      if ( x<_w-1 and cell(x+1,y) == CELL_FLUID)
+	aPlusX(x,y) = scale*uVol(x+1,y);
       else
-	aPlusX(x,y) = -scale;
+	aPlusX(x,y) = 0.0;
 
       // compute aPlusY
-      if (y==_h-1 or (y<_h-1 and cell(x,y+1) != CELL_FLUID) )
-	aPlusY(x,y) = 0.0;
+      if ( (y<_h-1 and cell(x,y+1) == CELL_FLUID) )
+	aPlusY(x,y) = scale*vVol(x,y+1);
       else
-	aPlusY(x,y) = -scale;
+	aPlusY(x,y) = 0.0;
       
     } else {
       // don't do anything,
@@ -422,6 +432,7 @@ public:
   Array2d       aDiag;
   Array2d       aPlusX, aPlusY;
   Array2d_uchar cell;
+  Array2d       uVol, vVol;
   double        scale;
   int           _w,_h;
   
