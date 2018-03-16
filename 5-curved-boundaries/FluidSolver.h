@@ -94,8 +94,8 @@ class FluidSolver {
 
     // a few Red-Black Gauss-Seidel iterations
     if (1) {
-      double omega = 0.6;
-      int nbIter = 10;
+      double omega = 0.9;
+      int nbIter = 1;
       reset_view(dst);
       ApplyPreconditionerFunctor::apply(dst, a, _d->_cell, _w, _h, omega, nbIter);
     }
