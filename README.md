@@ -8,7 +8,7 @@ The present repository is a naive parallelization of the first four steps with t
  - step3: improve the poisson solver: linear solver becomes a preconditioned conjugate gradient: here the preconditionner is not based the modified incomplete Cholesky factorization
           but uses a few Gauss-Seidel SOR iterations instead, easier to parallelize
  - step4: here we slightly deviates from the original step4; we modified the extrapolate operation to be more data parallelism oriented
- - step5: TODO
+ - step5: fluid-solid intrface improvement
  - step6: TODO
  - step7: TODO
  - step8: TODO
