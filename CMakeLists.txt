@@ -11,6 +11,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 #
 add_subdirectory(external/kokkos)
 
+#
+# to activate profiling at runtime, just export env variable
+# KOKKOS_PROFILE_LIBRARY with the full path to libkp_kernel_timer.so
+#
+if (ENABLE_KOKKOS_PROFILING)
+  add_subdirectory(external/kokkos-tools/simple-kernel-timer)
+endif(ENABLE_KOKKOS_PROFILING)
+
 # pass Kokkos include directories to our target application
 include_directories(${Kokkos_INCLUDE_DIRS_RET})
 
