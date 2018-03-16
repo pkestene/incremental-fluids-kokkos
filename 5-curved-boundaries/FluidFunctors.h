@@ -260,10 +260,14 @@ public:
    * \param[in]   uVol u volume array
    * \param[in]   vVol v volume array
    * \param[in]   cell is the array of cell type (CELL_FLUID or CELL_SOLID)
+   * \param[in]   bodies
    */
   BuildRHSFunctor(Array2d r, Array2d u, Array2d v,
 		  Array2d dVol, Array2d uVol, Array2d vVol,
-		  Array2d_uchar cell, double scale, int w, int h) :
+		  Array2d_uchar cell,
+		  Array2d_uchar body,
+		  SolidBodyList bodies,
+		  double scale, int w, int h, double hx) :
     _r(r),
     _u(u),
     _v(v),
@@ -271,19 +275,24 @@ public:
     _uVol(uVol),
     _vVol(vVol),
     _cell(cell),
+    _body(body),
+    _bodies(bodies),
     _scale(scale),
     _w(w),
-    _h(h)
+    _h(h),
+    _hx(hx)
   {};
 
   // static method which does it all: create and execute functor
   static void apply(Array2d r, Array2d u, Array2d v,
 		    Array2d dVol, Array2d uVol, Array2d vVol,
 		    Array2d_uchar cell,
-		    double scale, int w, int h)
+		    Array2d_uchar body,
+		    SolidBodyList bodies,
+		    double scale, int w, int h, double hx)
   {
     const int size = w*h;
-    BuildRHSFunctor functor(r, u, v, dVol, uVol, vVol, cell, scale, w, h);
+    BuildRHSFunctor functor(r, u, v, dVol, uVol, vVol, cell, body, bodies, scale, w, h, hx);
     Kokkos::parallel_for(size, functor);
   }
 
@@ -301,8 +310,17 @@ public:
 
       double vol = _dVol(x, y);
       
-      //if (_bodies.empty())
-      //continue;
+      if (_bodies.size()==0)
+        return;
+
+      if (x > 0)
+	_r(x,y) -= (_uVol(x, y) - vol)*_bodies(_body(x-1,y)).velocityX(x*_hx, (y + 0.5)*_hx);
+      if (y > 0)
+	_r(x,y) -= (_vVol(x, y) - vol)*_bodies(_body(x,y-1)).velocityY((x + 0.5)*_hx, y*_hx);
+      if (x < _w - 1)
+	_r(x,y) += (_uVol(x + 1, y) - vol)*_bodies(_body(x+1,y)).velocityX((x + 1.0)*_hx, (y + 0.5)*_hx);
+      if (y < _h - 1)
+	_r(x,y) += (_vVol(x, y + 1) - vol)*_bodies(_body(x,y+1)).velocityY((x + 0.5)*_hx, (y + 1.0)*_hx);
       
     } else {
       _r(x,y) = 0.0;
@@ -310,13 +328,14 @@ public:
     
   } // operator()
 
-  Array2d       _r;
-  Array2d       _u, _v;
-  Array2d       _dVol;
-  Array2d       _uVol, _vVol;
+  Array2d       _r, _u, _v;
+  Array2d       _dVol, _uVol, _vVol;
   Array2d_uchar _cell;
+  Array2d_uchar _body;
+  SolidBodyList _bodies;
   double        _scale;
   int           _w,_h;
+  double        _hx;
   
 }; // class BuildRHSFunctor
 
@@ -413,13 +432,13 @@ public:
 
       // compute aPlusX
       if ( x<_w-1 and cell(x+1,y) == CELL_FLUID)
-	aPlusX(x,y) = scale*uVol(x+1,y);
+	aPlusX(x,y) = -scale*uVol(x+1,y);
       else
 	aPlusX(x,y) = 0.0;
 
       // compute aPlusY
       if ( (y<_h-1 and cell(x,y+1) == CELL_FLUID) )
-	aPlusY(x,y) = scale*vVol(x,y+1);
+	aPlusY(x,y) = -scale*vVol(x,y+1);
       else
 	aPlusY(x,y) = 0.0;
       
@@ -427,6 +446,7 @@ public:
       // don't do anything,
       // aDiag, aPlusX, aPlusY have been reset previous calling this functor
     }
+    
   } // operator()
 
   Array2d       aDiag;
@@ -565,7 +585,7 @@ public:
 
     int x, y;
     index2coord(index,x,y,w,h);
-
+    
     // if red_black == RED then compute only if x and y have different parity
     // if red_black == BLACK then compute only if x and y have same parity
     if ( !((x+y+red_black)&1) ) {
@@ -1057,6 +1077,82 @@ public:
 // ==================================================================
 // ==================================================================
 /**
+ * FillSolidFields functor - compute distance field.
+ *
+ */
+class ComputeDistanceFieldFunctor {
+
+public:
+
+  /**
+   * \param[out]   phi : distance field to fill
+   * \param[in]    bodies
+   */
+  ComputeDistanceFieldFunctor(Array2d       phi,
+			      SolidBodyList bodies,
+			      int w,
+			      int h,
+			      double ox,
+			      double oy,
+			      double hx) :
+    _phi(phi),
+    _bodies(bodies),
+    _w(w),
+    _h(h),
+    _ox(ox),
+    _oy(oy),
+    _hx(hx)
+  {};
+
+  // static method which does it all: create and execute functor
+  static void apply(Array2d       phi,
+		    SolidBodyList bodies,
+		    int w,
+		    int h,
+		    double ox,
+		    double oy,
+		    double hx)
+  {
+    const int size = (w+1)*(h+1);
+    ComputeDistanceFieldFunctor functor(phi, bodies, w, h, ox, oy, hx);
+    Kokkos::parallel_for(size, functor);
+  }
+
+  KOKKOS_INLINE_FUNCTION
+  void operator() (const int& index) const
+  {
+
+    // take care here
+    // ix is in range 0.._w
+    // iy is in range 0.._h
+    int ix, iy;
+    index2coord(index,ix,iy,_w+1,_h+1);
+
+    double x = (ix + _ox - 0.5)*_hx;
+    double y = (iy + _oy - 0.5)*_hx;
+
+    // compute distance field
+    double min_distance = _bodies(0).distance(x, y);
+    for (unsigned i = 1; i < _bodies.size(); i++)
+      min_distance = fmin(min_distance, _bodies(i).distance(x, y));
+    _phi(ix,iy) = min_distance;
+    
+  } // end operator()
+  
+  Array2d       _phi;
+  SolidBodyList _bodies;
+  int _w;
+  int _h;
+  double _ox;
+  double _oy;
+  double _hx;
+
+}; // class ComputeDistanceFieldFunctor
+
+// ==================================================================
+// ==================================================================
+// ==================================================================
+/**
  * FillSolidFields functor.
  *
  * For a given fluid quantity, fill body and cell arrays.
@@ -1072,12 +1168,16 @@ public:
   /**
    * \param[in,out]     cell is array of cell type (_w,_h)
    * \param[in,out]     body is array of body Id per cell (_w,_h)
-   * \param[in,out]     normalX
-   * \param[in,out]     normalY
+   * \param[in]         phi (_w+1,_h+1)
+   * \param[out]        volume (_w,_h)
+   * \param[out]        normalX
+   * \param[out]        normalY
    * \param[in]         bodies
    */
   FillSolidFieldsFunctor(Array2d_uchar cell,
 			 Array2d_uchar body,
+			 Array2d       phi,
+			 Array2d       volume,
 			 Array2d       normalX,
 			 Array2d       normalY,
 			 SolidBodyList bodies,
@@ -1088,6 +1188,8 @@ public:
 			 double hx) :
     _cell(cell),
     _body(body),
+    _phi(phi),
+    _volume(volume),
     _normalX(normalX),
     _normalY(normalY),
     _bodies(bodies),
@@ -1101,6 +1203,8 @@ public:
   // static method which does it all: create and execute functor
   static void apply(Array2d_uchar cell,
 		    Array2d_uchar body,
+		    Array2d       phi,
+		    Array2d       volume,
 		    Array2d       normalX,
 		    Array2d       normalY,
 		    SolidBodyList bodies,
@@ -1111,7 +1215,7 @@ public:
 		    double hx)
   {
     const int size = w*h;
-    FillSolidFieldsFunctor functor(cell, body, normalX, normalY, bodies, w, h, ox, oy, hx);
+    FillSolidFieldsFunctor functor(cell, body, phi, volume, normalX, normalY, bodies, w, h, ox, oy, hx);
     Kokkos::parallel_for(size, functor);
   }
 
@@ -1140,27 +1244,33 @@ public:
       }
     }
     
-    /* 
-     * If distance to closest solid is negative, this cell must be
-     * inside it
+    /* Compute cell volume from the four adjacent distance samples */
+    _volume(ix,iy) = 1.0 - occupancy(_phi(ix,iy),   _phi(ix+1,iy),
+				     _phi(ix,iy+1), _phi(ix+1,iy+1) );
+    
+    /* Clamp dangerously small cell volumes - could break numerical
+     * solver otherwise
      */
-    if (d < 0.0)
+    if (_volume(ix,iy) < 0.01)
+      _volume(ix,iy) = 0.0;
+    
+    _bodies(_body(ix,iy)).distanceNormal(_normalX(ix,iy), _normalY(ix,iy), x, y);
+    
+    /* Solid cells are now defined as cells with zero fluid volume */
+    if (_volume(ix,iy) == 0.0)
       _cell(ix,iy) = CELL_SOLID;
     else
       _cell(ix,iy) = CELL_FLUID;
-
-    /*
-     * compute _normalX, _normalY
-     */
-    _bodies(_body(ix,iy)).distanceNormal(_normalX(ix,iy), _normalY(ix,iy), x, y);
     
   } // end operator()
   
   Array2d_uchar _cell;
   Array2d_uchar _body;
-  SolidBodyList _bodies;
+  Array2d       _phi;
+  Array2d       _volume;
   Array2d       _normalX;
   Array2d       _normalY;
+  SolidBodyList _bodies;
   int _w;
   int _h;
   double _ox;

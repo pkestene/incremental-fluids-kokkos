@@ -63,7 +63,8 @@ class FluidSolver {
 
     BuildRHSFunctor::apply(_r, _u->_src, _v->_src,
 			   _d->_volume, _u->_volume, _v->_volume,
-			   _d->_cell, scale, _w, _h);
+			   _d->_cell, _d->_body, _bodies,
+			   scale, _w, _h, _hx);
     
   } // buildRhs
 
@@ -93,7 +94,7 @@ class FluidSolver {
 
     // a few Red-Black Gauss-Seidel iterations
     if (1) {
-      double omega = 1.5;
+      double omega = 0.6;
       int nbIter = 10;
       reset_view(dst);
       ApplyPreconditionerFunctor::apply(dst, a, _d->_cell, _w, _h, omega, nbIter);
@@ -259,7 +260,7 @@ public:
     buildPressureMatrix(timestep);
     
     // compute pressure
-    project(600);
+    project(2000);
 
     // update velocity field with pressure gradient
     applyPressure(timestep);
@@ -297,8 +298,14 @@ public:
     if (_bodies.size() == 0)
       return;
 
+    ComputeDistanceFieldFunctor::apply(fq->_phi,
+				       _bodies,
+				       _w,_h, fq->_ox, fq->_oy, _hx);
+    
     FillSolidFieldsFunctor::apply(fq->_cell,
 				  fq->_body,
+				  fq->_phi,
+				  fq->_volume,
 				  fq->_normalX,
 				  fq->_normalY,
 				  _bodies,

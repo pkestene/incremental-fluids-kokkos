@@ -35,6 +35,20 @@ enum CellMaskState : uint8_t {
   DONE
 };
 
+// init _cell and _volume
+void init_cell_volume(Array2d_uchar cell, Array2d volume) {
+
+  const int size = cell.dimension_0()*cell.dimension_1();
+  
+  Kokkos::parallel_for(size, KOKKOS_LAMBDA(const int index) {
+      int x, y;
+      index2coord(index,x,y,cell.dimension_0(),cell.dimension_1());
+      cell(x,y) = CELL_FLUID;
+      volume(x,y) = 1.0;
+    });
+  
+} // init_cell_colume
+
 /* This is the class representing fluid quantities such as density and velocity
  * on the MAC grid. It saves attributes such as offset from the top left grid
  * cell, grid width and height as well as cell size.
@@ -144,15 +158,7 @@ public:
     _mask = Array2d_uchar("_mask",_w,_h);
 
     // init _cell and _volume
-    {
-      
-      Kokkos::parallel_for(_w*_h, KOKKOS_LAMBDA(const int index) {
-	  int x, y;
-	  index2coord(index,x,y,_w,_h);
-	  _cell(x,y) = CELL_FLUID;
-	  _volume(x,y) = 1.0;
-	});
-    }
+    init_cell_volume(_cell,_volume);
     
   }
   
