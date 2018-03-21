@@ -1,7 +1,10 @@
 Incremental fluids with Kokkos
 ==============================
 
-The present repository is a naive parallelization of the first five steps with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability.
+The present repository, we revisit the fluid simulation tutorial [incremental-fluids](https://github.com/tunabrain/incremental-fluids) by [Benedikt Bitterli](https://benedikt-bitterli.me/)
+in order to illustrate how to parallelize code with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability (CPU, CPU, ...).
+
+Right now only the first five steps are parallelized with some tradeoff (e.g. regarding the choice of the preconditioner)
 
  - step1: setup the basic build blocks of an incompressible flow solver: advection + poisson solver to ensure incompressibility (divergence of velocity is zero)
  - step2: modify advection (third order Runge Kutta)
@@ -41,7 +44,7 @@ nvcc_wrapper is located in kokkos sources; here it should be in external/kokkos/
 
 ## Performance measurement with Kokkos
 
-TODO
+A simple kernel time measurement is implemented; see subdirectory external/kokkos-tools/simple-kernel-timer/readme.md
 
 ## Going further
 
