@@ -1,7 +1,7 @@
 Incremental fluids with Kokkos
 ==============================
 
-The present repository, we revisit the fluid simulation tutorial [incremental-fluids](https://github.com/tunabrain/incremental-fluids) by [Benedikt Bitterli](https://benedikt-bitterli.me/)
+We revisit the fluid simulation tutorial [incremental-fluids](https://github.com/tunabrain/incremental-fluids) by [Benedikt Bitterli](https://benedikt-bitterli.me/)
 in order to illustrate how to parallelize code with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability (CPU, CPU, ...).
 
 Right now only the first five steps are parallelized with some tradeoff (e.g. regarding the choice of the preconditioner)
