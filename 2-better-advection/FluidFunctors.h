@@ -452,8 +452,8 @@ class ProjectFunctor_GaussSeidel
 public:
 
   enum RedBlack_t {
-    RED,
-    BLACK
+    RED = 0,
+    BLACK = 1
   };
   
   /**
@@ -539,21 +539,12 @@ public:
     int x, y;
     index2coord(index,x,y,_w,_h);
 
-    if (redblack_type == RED) { // x and y have same parity
-
-      if ( !((x+y)&1) ) {
-	
-	do_red_black(x,y, maxDelta);
-
-      }
+    // redblack_type = RED means x and y have same parity
+    // redblack_type = BLACK means x and y have different parity
+    
+    if ( !((x+y+redblack_type)&1) ) {
       
-    } else if (redblack_type == BLACK) { // x and y have different parity
-
-      if ( ((x+y)&1) ) {
-
-	do_red_black(x,y, maxDelta);
-
-      }
+      do_red_black(x,y, maxDelta);
       
     }
     
