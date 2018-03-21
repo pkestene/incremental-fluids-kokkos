@@ -441,15 +441,21 @@ public:
 // ==================================================================
 // ==================================================================
 /**
- * Apply preconditioner to vector `a' and store it in `dst' 
+ * Apply MIC preconditioner to vector `a' and store it in `dst' 
  *
- * preditionning is divided in two steps.
+ * Modified Incomplete Cholesky is not easy to parallelize efficiently
+ * with (massive) multithreading model.
  *
- * The parallelization is the naive, diagonal by diagonal, with explicit 
- * synchronization in between. Very inefficient on GPU (one kernel launch
- * per diagonal).
+ * A naive parallelization consists in computing diagonal by diagonal, 
+ * with explicit synchronization in between. Should be very inefficient 
+ * on GPU (one kernel launch per diagonal).
  *
  * A real smart algorithm is hard to design here.
+ * TODO
+ *
+ * For now just use the serial version on host.
+ * Look into the modified step3 3-conjugate-gradients_GS, where the
+ * precontioner is SOR Gauss-Seidel.
  *
  */
 class ApplyPreconditionerFunctor
@@ -493,41 +499,6 @@ public:
     Kokkos::parallel_for(size, functor);
   }
 
-  KOKKOS_INLINE_FUNCTION
-  void step1 (int& x, int& y) const
-  {
-
-    // forward sweep
-    
-    double t = a(x,y);
-    
-    if (x > 0)
-      t -= aPlusX(x-1,y  )*precon(x-1,y  )*dst(x-1,y  );
-    if (y > 0)
-      t -= aPlusY(x  ,y-1)*precon(x  ,y-1)*dst(x  ,y-1);
-    
-    dst(x,y) = t*precon(x,y);
-    
-  } // step1
-  
-  KOKKOS_INLINE_FUNCTION
-  void step2 (int& x, int& y) const
-  {
-
-    // reverse order of sweeping
-    x = w-x;
-    y = h-y;
-    
-    double t = dst(x,y);
-    
-    if (x < w - 1)
-      t -= aPlusX(x,y)*precon(x,y)*dst(x+1,y);
-    if (y < h - 1)
-      t -= aPlusY(x,y)*precon(x,y)*dst(x,y+1);
-    
-    dst(x,y) = t*precon(x,y);
-
-  } // step2
 
   KOKKOS_INLINE_FUNCTION
   void operator() (const int& index) const
@@ -536,12 +507,7 @@ public:
     int x, y;
     index2coord(index,x,y,w,h);
 
-    if (stepId == 1)
-      step1(x,y);
-    
-    if (stepId == 2)
-      step2(x,y);
-    
+    // TODO
     
   } // operator()
 
