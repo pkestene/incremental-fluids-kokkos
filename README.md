@@ -2,9 +2,13 @@ Incremental fluids with Kokkos
 ==============================
 
 We revisit the fluid simulation tutorial [incremental-fluids](https://github.com/tunabrain/incremental-fluids) by [Benedikt Bitterli](https://benedikt-bitterli.me/)
-in order to illustrate how to parallelize code with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability (CPU, CPU, ...).
+in order to illustrate how to parallelize code with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability (CPU, CPU, ...), focusing on shared memory parallelization.
 
-Right now only the first five steps are parallelized with some tradeoff (e.g. regarding the choice of the preconditioner)
+Right now only the first five steps are parallelized with some tradeoff (e.g. regarding the choice of the preconditioner).
+If you're serious about high-performance parallel (distributed and shared memory) linear algebra applications, it's time to use [trilinos package](https://trilinos.org/) (which contains a copy of Kokkos).
+
+
+Which steps are implemented ?
 
  - step1: setup the basic build blocks of an incompressible flow solver: advection + poisson solver to ensure incompressibility (divergence of velocity is zero)
  - step2: modify advection (third order Runge Kutta)
