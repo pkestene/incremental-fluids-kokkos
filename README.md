@@ -1,7 +1,7 @@
 Incremental fluids with Kokkos
 ==============================
 
-The present repository is a naive parallelization of the first four steps with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability.
+The present repository is a naive parallelization of the first five steps with the [Kokkos programing model](https://github.com/kokkos/kokkos) for performance portability.
 
  - step1: setup the basic build blocks of an incompressible flow solver: advection + poisson solver to ensure incompressibility (divergence of velocity is zero)
  - step2: modify advection (third order Runge Kutta)
@@ -13,6 +13,7 @@ The present repository is a naive parallelization of the first four steps with t
  - step7: TODO
  - step8: TODO
 
+The original code (https://github.com/tunabrain/incremental-fluids) as the present one are placed under the zlib licence.
 
 Illustration of step4:
 ![step4 with kokkos on GPU](/step4.gif)
