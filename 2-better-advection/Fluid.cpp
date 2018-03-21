@@ -21,6 +21,12 @@
   distribution.
 */
 
+/*
+  Original file modified for parallelization with Kokkos library.
+
+  Copyright (c) 2018 Pierre Kestener
+ */
+
 #include <algorithm> // for std::swap
 #include <math.h>
 #include <stdio.h>
